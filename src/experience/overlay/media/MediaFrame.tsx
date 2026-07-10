@@ -59,6 +59,7 @@ export function MediaFrame({
       className={`mf mf-${t}${className ? ` ${className}` : ''}`}
       data-source={asset.sourceType}
       data-state={asset.assetState}
+      data-crop={asset.crop}
       data-motif={sub?.motif}
     >
       <div className={`mf-media${failed ? ' mf-missing' : ''}`}>

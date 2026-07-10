@@ -87,12 +87,14 @@ test('1769 renders its own identity, distinct from 1969', async ({ page }) => {
     .evaluate((el) => getComputedStyle(el).getPropertyValue('--yr-paper').trim());
   expect(paper).toBe('#d8c7a3');
 
-  // all 1769 media is placeholder-state and labelled as such
-  const placeholderFrames = page.locator(
-    '.yp-events .mf[data-state="placeholder"]'
-  );
-  expect(await placeholderFrames.count()).toBeGreaterThanOrEqual(4);
+  // all 1769 section media is FINAL generated artwork, honestly labelled
+  const finalFrames = page.locator('.yp-events .mf[data-state="final"]');
+  expect(await finalFrames.count()).toBeGreaterThanOrEqual(4);
   await expect(
     page.locator('.yp-events .mf-caption .mf-cap-src').first()
-  ).toContainText(/placeholder/i);
+  ).toContainText(/generated illustration/i);
+  // the measured interlude plate is present between events and closing
+  await expect(
+    page.locator('.yp-interlude.single .mf[data-state="final"]')
+  ).toBeAttached();
 });

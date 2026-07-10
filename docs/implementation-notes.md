@@ -568,3 +568,33 @@ raw ink for long-form legibility (documented palette adjustment).
   yearly cues via colour only).
 - Copperplate stacks fall back to Baskerville/serif on systems without
   Copperplate; acceptable, documented in the identity comment.
+
+### Cycle 5b addendum — final 1769 artwork integrated (2026-07-10)
+
+- All seven 1769 slots now carry FINAL externally generated artwork
+  (project-directed): hero workshop scene, sectioned steam plate,
+  encyclopaedia specimen sheet, world chart, spinning-workshop scene,
+  atmospheric closing sheet, and the transit-of-Venus measured diagram.
+  Web-optimised WebP (q82, sharp-yuv, 126–580 KB each) under
+  public/yol1769/; PNG masters stay OUTSIDE the repository.
+- Hero: the landscape master is used intentionally via focal-aware cover
+  crop (focal 74%/45%) — the hero art element and its parallax now honour
+  the manifest focal point (data-fx/fy), so desktop shows the apparatus
+  slice and narrow layouts show the full harbour scene. No layout rewrite.
+- Technical plates: `crop: 'contain'` is now honoured
+  (`.mf[data-crop='contain']`) so sectioned plates and annotations are
+  never crop-sacrificed.
+- Trade map: the map-sheet graticule overlay is PLACEHOLDER-ONLY now —
+  the final chart carries its own engraved graticule and the CSS overlay
+  competed with it.
+- Transition plate resolved: `transition-plate-1769` is composed as a
+  single-plate interlude between the labour plate and the closing
+  panorama (`.yp-interlude.single`) — a quiet measured moment whose
+  dotted transit line carries the Line motif inside the year. Dev slot
+  labels now render only for placeholder-state assets.
+- Placeholder slot SVGs are retained under public/yol1769/slots/ as
+  graceful fallbacks and dev references.
+- Verification: lint/tsc/49 unit tests clean; all 11 Playwright specs
+  pass against `next start` (yol-1769 spec updated for final-state
+  assets); build via the split compile/generate phases in-sandbox (the
+  single-pass build exceeds the 45s cap — GitHub CI runs it whole).

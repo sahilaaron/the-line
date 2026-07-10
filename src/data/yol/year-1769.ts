@@ -77,5 +77,8 @@ export const YOL_1769: YearYol = {
 
   /* no quote: no verified 1769 quotation sourced yet — do not fabricate */
 
-  interludeAssetIds: [],
+  /* the measured transit plate sits between the labour plate and the
+     closing panorama — a quiet, single-plate interlude that carries the
+     Line motif (a measured line crossing a disc) inside the year */
+  interludeAssetIds: ['transition-plate-1769'],
 };

@@ -128,7 +128,9 @@ export function YolPage() {
       });
       const hero = root.querySelector<HTMLElement>('.yp-hero-art');
       if (hero) {
-        hero.style.backgroundPosition = `center calc(50% + ${(
+        const fx = hero.dataset.fx ?? '50%';
+        const fy = hero.dataset.fy ?? '50%';
+        hero.style.backgroundPosition = `${fx} calc(${fy} + ${(
           root.scrollTop * 0.06
         ).toFixed(1)}px)`;
       }
@@ -217,9 +219,16 @@ export function YolPage() {
           role="img"
           aria-label={heroAsset?.alt}
           data-state={heroAsset?.assetState}
+          data-fx={heroAsset?.focal ? `${Math.round(heroAsset.focal.x * 100)}%` : undefined}
+          data-fy={heroAsset?.focal ? `${Math.round(heroAsset.focal.y * 100)}%` : undefined}
           style={
             heroAsset
-              ? { backgroundImage: `url('${heroAsset.path}')` }
+              ? {
+                  backgroundImage: `url('${heroAsset.path}')`,
+                  backgroundPosition: heroAsset.focal
+                    ? `${Math.round(heroAsset.focal.x * 100)}% ${Math.round(heroAsset.focal.y * 100)}%`
+                    : undefined,
+                }
               : undefined
           }
         />
@@ -272,21 +281,27 @@ export function YolPage() {
         })}
       </div>
 
-      {/* interlude: named slots awaiting externally generated imagery
-          (dev surfaces, clearly labelled in the DOM, no baked text) */}
+      {/* interlude plates: finished assets read as a quiet measured moment;
+          placeholder slots stay visibly provisional dev surfaces */}
       {interludeAssets.length > 0 && (
         <section
-          className="yp-interlude reveal"
-          aria-label="Image slots awaiting generated imagery"
+          className={`yp-interlude reveal${
+            interludeAssets.length === 1 ? ' single' : ''
+          }`}
+          aria-label="Interlude plates"
         >
           {interludeAssets.map((slot) => (
             <div key={slot.id} className="yp-slot">
               <MediaFrame
                 asset={slot}
                 identity={identity}
-                treatment="archival-frame"
+                treatment={
+                  slot.assetState === 'placeholder' ? 'archival-frame' : undefined
+                }
               />
-              <span className="yp-slot-id">slot: {slot.section}</span>
+              {slot.assetState === 'placeholder' && (
+                <span className="yp-slot-id">slot: {slot.section}</span>
+              )}
             </div>
           ))}
         </section>
@@ -315,9 +330,9 @@ export function YolPage() {
           />
         )}
         <p className="yp-note">
-          Artwork and illustrations are illustrative reconstructions or
-          placeholder slots, not archival media. Event summaries are
-          placeholders pending editorial verification.
+          Artwork is project-directed generated illustration, illustrative
+          reconstruction or a placeholder slot — never archival media. Event
+          summaries are placeholders pending editorial verification.
         </p>
       </section>
 

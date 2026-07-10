@@ -1815,8 +1815,10 @@ body {
   box-shadow: none;
 }
 
-/* graticule: measured grid over the sheet, in the year's signal colour */
-.mf-map-sheet .mf-media::after {
+/* graticule: measured grid over the sheet, in the year's signal colour —
+   PLACEHOLDER surfaces only; final charts carry their own engraved
+   graticule and the overlay would compete with it */
+.mf-map-sheet[data-state='placeholder'] .mf-media::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -2039,4 +2041,29 @@ body {
   .yp-tl-year {
     flex: 1 0 4.4rem;
   }
+}
+
+/* ---------- final-artwork refinements (1769 integration) ---------- */
+
+/* technical plates marked `contain` keep their full sheet visible —
+   fine annotations and plate edges must never be crop-sacrificed */
+.mf[data-crop='contain'] .mf-media img {
+  object-fit: contain;
+  background: color-mix(in srgb, #ffffff 14%, var(--yr-surface-alt, #cdbb94));
+}
+
+/* a single interlude plate reads as one quiet, measured moment */
+.yp-interlude.single {
+  grid-template-columns: minmax(0, 46rem);
+  justify-content: center;
+}
+
+.yp-interlude.single .mf-media img {
+  max-height: 44vh;
+  width: 100%;
+  object-fit: cover;
+}
+
+.yp-interlude.single .mf-caption {
+  justify-content: center;
 }
