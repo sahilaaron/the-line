@@ -610,3 +610,15 @@ Not artwork-related. Fixes: `workers: 1` on CI (playwright.config.ts),
 poll the reveal instead of fixed-sleep asserts, and retry the return
 click like a real user (`expect(...).toPass`). The lock-swallowing
 behaviour itself is by design and stays.
+
+### Cycle 5b close-out — product vision clarification (2026-07-10)
+
+Sahil completed the real-GPU visual review of PR #10 (all checklist items
+confirmed; ChatGPT reviewed the diff and the green CI run) and approved
+the PR for merge. Recorded product decision: the stacked editorial YoL
+page is an ACCEPTED FUNCTIONAL PROTOTYPE of the Year Visual Identity
+architecture — the intended interaction model is a nested, scroll-driven
+local-timeline world, deliberately deferred to a separate tracked build.
+The deferred-builds list (none started) lives in GOAL.md. README and
+GOAL.md were corrected so neither implies 1969-only descent, a fully
+disconnected database, or that the stacked layout is final.

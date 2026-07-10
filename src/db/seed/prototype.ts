@@ -77,7 +77,7 @@ export async function seedPrototype(db: Db): Promise<PrototypeSeedSummary> {
       themeEntityIds.push(entity.id);
     }
 
-    // 3. YoL composition (only 1969 has real placeholder thesis content in
+    // 3. YoL composition (1969 and 1769 carry real placeholder content in
     // src/data/yol.ts today; other anchors get a generic draft placeholder
     // so every anchor has a composition row to demonstrate the shape).
     let yol = await findYolByAnchorSlug(db, anchor.id);
