@@ -59,10 +59,12 @@ test('theme lenses respond to keyboard focus and hover', async ({ page }) => {
   );
 
   // canvas must keep rendering while a lens is focused (no crash): return
-  await page.getByTestId('return-btn').click();
-  await expect(page.getByTestId('yol-ui')).toHaveClass(/hidden/, {
-    timeout: 15_000,
-  });
+  await expect(async () => {
+    await page.getByTestId('return-btn').click();
+    await expect(page.getByTestId('yol-ui')).toHaveClass(/hidden/, {
+      timeout: 3_000,
+    });
+  }).toPass({ timeout: 20_000 });
   await expect(page.getByTestId('year-label')).toHaveText('1969');
 });
 
@@ -84,17 +86,24 @@ test('reduced motion: loop still works with short crossfade', async ({
   await expect(page.getByTestId('yol-title')).toHaveText('1969', {
     timeout: 6_000,
   });
-  await page.waitForTimeout(1500);
-  const lensOpacity = Number(
-    await page
-      .locator('.yp-chips')
-      .evaluate((el) => getComputedStyle(el).opacity)
-  );
-  expect(lensOpacity).toBeGreaterThan(0.9);
+  // the reveal is time-driven; poll instead of asserting once after a
+  // fixed sleep (slow CI runners lag the rAF loop)
+  await expect
+    .poll(
+      () =>
+        page
+          .locator('.yp-chips')
+          .evaluate((el) => Number(getComputedStyle(el).opacity)),
+      { timeout: 10_000 }
+    )
+    .toBeGreaterThan(0.9);
 
-  await page.getByTestId('return-btn').click();
-  await expect(page.getByTestId('yol-ui')).toHaveClass(/hidden/, {
-    timeout: 8_000,
-  });
+  // the return click can be swallowed while the transition lock holds
+  await expect(async () => {
+    await page.getByTestId('return-btn').click();
+    await expect(page.getByTestId('yol-ui')).toHaveClass(/hidden/, {
+      timeout: 3_000,
+    });
+  }).toPass({ timeout: 15_000 });
   await expect(page.getByTestId('year-label')).toHaveText('1969');
 });

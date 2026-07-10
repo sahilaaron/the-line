@@ -598,3 +598,15 @@ raw ink for long-form legibility (documented palette adjustment).
   pass against `next start` (yol-1769 spec updated for final-state
   assets); build via the split compile/generate phases in-sandbox (the
   single-pass build exceeds the 45s cap — GitHub CI runs it whole).
+
+### CI flake diagnosis (2026-07-10, PR #10 run 4 / main run 2)
+
+GitHub's 2-core runners running TWO parallel Playwright workers starve the
+rAF/GSAP loop: arrival-timing specs failed on plain main (run 2: reduced-
+motion lens opacity 0/0.28 at a fixed-sleep assert) and the 1969 core-loop
+return failed once the suite grew (run 4: the return click landed while
+the transition lock was still engaged and was intentionally swallowed).
+Not artwork-related. Fixes: `workers: 1` on CI (playwright.config.ts),
+poll the reveal instead of fixed-sleep asserts, and retry the return
+click like a real user (`expect(...).toPass`). The lock-swallowing
+behaviour itself is by design and stays.

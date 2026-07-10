@@ -4,6 +4,9 @@ export default defineConfig({
   testDir: './e2e',
   timeout: 90_000,
   retries: 1,
+  // CI runners have 2 cores; parallel browser workers starve the
+  // rAF/GSAP-driven experience and make arrival-timing specs flaky.
+  workers: process.env.CI ? 1 : undefined,
   use: {
     baseURL: 'http://localhost:3011',
     viewport: { width: 1600, height: 900 },
