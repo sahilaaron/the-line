@@ -801,3 +801,75 @@ disconnected database, or that the stacked layout is final.
   unaffected.
 - `findNearestCuratedAnchor` itself is kept (its repo test documents its
   slug semantics) but is no longer used to locate anchors.
+
+## Cycle 7 — Historical Field & recursive Topic Worlds (issue #16, 2026-07-11, IN PROGRESS)
+
+Kernel built and proven by Fable; construction handed to Opus
+(`instruction-set/YoL-layered-handover.md`). Architecture decisions:
+
+- **World stack, not booleans**: `src/experience/worlds.ts` +
+  store `worldStack: StackedFrame[]` with generic
+  `pushWorld/popWorld/returnToDepth/updateTopRestore`. `mode: 'yol'` now
+  means "inside the world stack"; the top frame selects the renderer
+  (yol | historical-field | topic). Line ↔ first-world keeps the proven
+  camera descent; world ↔ world hops are overlay-level shared-element
+  transitions behind the SAME `locked` flag — every existing input guard
+  kept working unchanged.
+- **Exact restoration is data, not reconstruction**: renderers write
+  their live position into the top frame (`updateTopRestore`) BEFORE each
+  push; pops read it back. Deterministic layout + seeded plates guarantee
+  identical arrangements. Proven to depth 5 in
+  `e2e/historical-chain.spec.ts`.
+- **Continuous field time** (`fieldTimeState`, fractional years) is a
+  separate axis from the YoL point index — forcing the field into the
+  index model would have made equal-step assumptions structural. Same
+  ease/idle-snap discipline, BCE-safe integers at the data layer.
+- **Deterministic temporal collage** (`src/experience/field/layout.ts`):
+  x = temporal truth (+bounded seeded jitter + editorial offset); lanes
+  with per-(depth,lane) interval collision tracking; bounded x-nudge then
+  depth demotion; deepest layer may accept residual overlap under extreme
+  hotspots (pressure valve, front layers always clean — unit-enforced).
+  Layout computed once per dataset; per-frame work = 4 container
+  transforms + emphasis writes.
+- **Transition = cover plate** (`WorldTransition.tsx`): the clicked
+  visual's seeded plate expands from its captured rect, the swap commits
+  fully covered AND data-ready, the plate dissolves into the destination;
+  pop shrinks back to the stored entryRect. The cloud-layer trick, one
+  depth deeper. Reduced motion: short fades, same lock/data semantics.
+- **CRM boundary**: renderers consume `src/domain/worlds.ts` view models
+  through `HistoricalWorldDataSource` only (mock adapter today) —
+  `docs/backend-crm-handoff.md` is the future backend contract.
+- **Destination map** (`src/data/worlds/destinations.ts`): 1769 → field,
+  1969 → YoL (issue #14 renderer untouched); adding ranges = data.
+- Debug URL tuning `?debug=1&tune.<key>=<n>` seeds useTuning (visual
+  iteration + lets the chain spec run fast tunables through identical
+  code paths).
+
+### Critical findings
+- The overlay root is `pointer-events: none`; every new world surface
+  must opt in (`.tw-root` auto) — but the FIELD surface must stay
+  hit-transparent (`.hf-root` none) with plates opting in per frame,
+  or full-viewport layer containers eat the plates' clicks. Layer
+  containers additionally need explicit `pointer-events: none` AND
+  back-to-front z-indices (they are stacking contexts; DOM order would
+  paint depth-2 above depth-0).
+- Field plates are only clickable within `fieldActiveRadiusYears` of
+  their moment — by design. Specs must stand near a subject's year
+  before entering it (a first spec draft burned its budget retrying a
+  correctly-inert plate).
+
+### Verified (sandbox, software rendering)
+lint, tsc, production build green; 91 unit tests (incl. 7 layout + 9
+world-stack); db suites untouched and sampled green; all 14 Playwright
+specs pass locally per-file (historical-chain 27.6s with fast tunables;
+1969 regression suite updated for the new destination map:
+`enterField` helper, renderer-split assertions). Browser-proven: full
+chain to depth 5 with exact restoration (chapter positions, field year
+1767, focused plate, parent anchor 1769), no reload, no Canvas remount.
+
+### Known defects / deferred (also listed in the handover)
+Sparse field at range edges until the 40–60 record fill; hover labels can
+overflow at the lowest lane; far plates remain in tab order; no field
+touch drag yet; browser-history integration deliberately out; transition
+plate could zoom the outgoing world beneath (optional polish). Real-GPU
+motion review outstanding for field parallax + transition timing.
