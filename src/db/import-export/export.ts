@@ -31,6 +31,8 @@ export async function exportDatabase(db: Db): Promise<ExportPayload> {
     yolThemes,
     yolSceneHints,
     yolFeaturedEntities,
+    yolTimelinePoints,
+    yolPointThemes,
     media,
     mediaAssociations,
   ] = await Promise.all([
@@ -54,6 +56,8 @@ export async function exportDatabase(db: Db): Promise<ExportPayload> {
     db.query.yolThemes.findMany(),
     db.query.yolSceneHints.findMany(),
     db.query.yolFeaturedEntities.findMany(),
+    db.query.yolTimelinePoints.findMany(),
+    db.query.yolPointThemes.findMany(),
     db.query.media.findMany(),
     db.query.mediaAssociations.findMany(),
   ]);
@@ -82,6 +86,8 @@ export async function exportDatabase(db: Db): Promise<ExportPayload> {
       yolThemes,
       yolSceneHints,
       yolFeaturedEntities,
+      yolTimelinePoints,
+      yolPointThemes,
       media,
       mediaAssociations,
     },
@@ -92,17 +98,29 @@ export async function exportYolClosure(db: Db, yolId: string): Promise<ExportPay
   const yol = await db.query.yolCompositions.findFirst({ where: (t, { eq }) => eq(t.id, yolId) });
   if (!yol) throw new Error(`YoL composition ${yolId} not found`);
 
-  const [themes, hints, featured] = await Promise.all([
+  const [themes, hints, featured, timelinePoints] = await Promise.all([
     db.query.yolThemes.findMany({ where: (t, { eq }) => eq(t.yolId, yolId) }),
     db.query.yolSceneHints.findMany({ where: (t, { eq }) => eq(t.yolId, yolId) }),
     db.query.yolFeaturedEntities.findMany({ where: (t, { eq }) => eq(t.yolId, yolId) }),
+    db.query.yolTimelinePoints.findMany({ where: (t, { eq }) => eq(t.yolId, yolId) }),
   ]);
+  const pointThemes =
+    timelinePoints.length > 0
+      ? await db.query.yolPointThemes.findMany({
+          where: inArray(schema.yolPointThemes.pointId, timelinePoints.map((tp) => tp.id)),
+        })
+      : [];
 
   const entityIds = new Set<string>([
     ...themes.map((t) => t.themeEntityId),
     ...featured.map((f) => f.entityId),
+    ...timelinePoints.flatMap((tp) => (tp.entityId ? [tp.entityId] : [])),
   ]);
-  const period = await db.query.periods.findFirst({ where: (t, { eq }) => eq(t.id, yol.periodId) });
+  const periodIds = new Set<string>([
+    yol.periodId,
+    ...timelinePoints.flatMap((tp) => (tp.periodId ? [tp.periodId] : [])),
+  ]);
+  const closurePeriods = await db.query.periods.findMany({ where: inArray(schema.periods.id, [...periodIds]) });
 
   const entities = entityIds.size > 0 ? await db.query.entities.findMany({ where: inArray(schema.entities.id, [...entityIds]) }) : [];
   const relationships =
@@ -128,7 +146,7 @@ export async function exportYolClosure(db: Db, yolId: string): Promise<ExportPay
     formatVersion: EXPORT_FORMAT_VERSION,
     exportedAt: new Date().toISOString(),
     data: {
-      periods: period ? [period] : [],
+      periods: closurePeriods,
       entities,
       entityPersonDetails: [],
       entityInventionDetails: [],
@@ -148,6 +166,8 @@ export async function exportYolClosure(db: Db, yolId: string): Promise<ExportPay
       yolThemes: themes,
       yolSceneHints: hints,
       yolFeaturedEntities: featured,
+      yolTimelinePoints: timelinePoints,
+      yolPointThemes: pointThemes,
       media: [],
       mediaAssociations: [],
     },

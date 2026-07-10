@@ -18,6 +18,10 @@ export const periodCreateSchema = z
     precision: z.enum(timePrecisionValues),
     startYear: yearSchema.optional(),
     endYear: yearSchema.optional(),
+    startMonth: z.number().int().min(1).max(12).optional(),
+    startDay: z.number().int().min(1).max(31).optional(),
+    endMonth: z.number().int().min(1).max(12).optional(),
+    endDay: z.number().int().min(1).max(31).optional(),
     isStartUncertain: z.boolean().default(false),
     isEndUncertain: z.boolean().default(false),
     displayYear: yearSchema.optional(),
@@ -31,6 +35,20 @@ export const periodCreateSchema = z
         code: 'custom',
         path: ['startYear'],
         message: `startYear (${val.startYear}) must be <= endYear (${val.endYear})`,
+      });
+    }
+    if (val.startDay !== undefined && val.startMonth === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['startDay'],
+        message: 'startDay requires startMonth',
+      });
+    }
+    if (val.endDay !== undefined && val.endMonth === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['endDay'],
+        message: 'endDay requires endMonth',
       });
     }
     if (val.precision === 'exact' && val.startYear === undefined) {

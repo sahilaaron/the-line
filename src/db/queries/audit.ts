@@ -29,7 +29,7 @@ export async function runIntegrityAudit(db: Db): Promise<AuditReport> {
   const warnings: AuditIssue[] = [];
   const errors: AuditIssue[] = [];
 
-  const [allEntities, allPeriods, allRelationships, allClaims, allMedia, allMediaAssociations, allYolCompositions, allYolThemes] =
+  const [allEntities, allPeriods, allRelationships, allClaims, allMedia, allMediaAssociations, allYolCompositions, allYolThemes, allYolTimelinePoints, allYolPointThemes] =
     await Promise.all([
       db.query.entities.findMany(),
       db.query.periods.findMany(),
@@ -39,6 +39,8 @@ export async function runIntegrityAudit(db: Db): Promise<AuditReport> {
       db.query.mediaAssociations.findMany(),
       db.query.yolCompositions.findMany(),
       db.query.yolThemes.findMany(),
+      db.query.yolTimelinePoints.findMany(),
+      db.query.yolPointThemes.findMany(),
     ]);
 
   const entityIds = new Set(allEntities.map((e) => e.id));
@@ -129,6 +131,40 @@ export async function runIntegrityAudit(db: Db): Promise<AuditReport> {
     }
   }
 
+  // --- YoL local chronology integrity ---
+  const entityIndex = new Map(allEntities.map((e) => [e.id, e]));
+  const periodIndex = new Map(allPeriods.map((p) => [p.id, p]));
+  const themeYolByRowId = new Map(allYolThemes.map((t) => [t.id, t.yolId]));
+  const pointById = new Map(allYolTimelinePoints.map((p) => [p.id, p]));
+  for (const p of allYolTimelinePoints) {
+    if (p.entityId && !entityIndex.has(p.entityId)) {
+      errors.push({ code: 'orphaned_timeline_point_entity', message: `timeline point ${p.id} references missing entity ${p.entityId}`, subjectId: p.id });
+    }
+    if (p.periodId && !periodIndex.has(p.periodId)) {
+      errors.push({ code: 'orphaned_timeline_point_period', message: `timeline point ${p.id} references missing period ${p.periodId}`, subjectId: p.id });
+    }
+    if (!p.isSynthetic) {
+      const ent = p.entityId ? entityIndex.get(p.entityId) : undefined;
+      const per = p.periodId ? periodIndex.get(p.periodId) : undefined;
+      if (ent?.isSynthetic) {
+        errors.push({ code: 'timeline_point_synthetic_leak', message: `non-synthetic timeline point ${p.id} references synthetic entity ${p.entityId}`, subjectId: p.id });
+      }
+      if (per?.isSynthetic) {
+        errors.push({ code: 'timeline_point_synthetic_leak', message: `non-synthetic timeline point ${p.id} references synthetic period ${p.periodId}`, subjectId: p.id });
+      }
+    }
+    if (p.role === 'development' && !p.entityId) {
+      warnings.push({ code: 'timeline_point_missing_subject', message: `development point ${p.id} has no entity subject`, subjectId: p.id });
+    }
+  }
+  for (const pt of allYolPointThemes) {
+    const point = pointById.get(pt.pointId);
+    const themeYol = themeYolByRowId.get(pt.yolThemeId);
+    if (point && themeYol && point.yolId !== themeYol) {
+      errors.push({ code: 'timeline_point_theme_cross_composition', message: `point theme ${pt.id} links point ${pt.pointId} to a theme of another composition`, subjectId: pt.id });
+    }
+  }
+
   // --- unreachable entities (no relationships at all) ---
   const connected = new Set<string>();
   for (const r of allRelationships) {
@@ -200,6 +236,7 @@ export async function runIntegrityAudit(db: Db): Promise<AuditReport> {
     claims: allClaims.length,
     media: allMedia.length,
     yolCompositions: allYolCompositions.length,
+    yolTimelinePoints: allYolTimelinePoints.length,
   };
 
   return { totals, warnings, errors };

@@ -19,8 +19,10 @@ import type {
   Source,
   YolComposition,
   YolFeaturedEntity,
+  YolPointTheme,
   YolSceneHint,
   YolTheme,
+  YolTimelinePoint,
 } from '../schema';
 
 export const EXPORT_FORMAT_VERSION = 1;
@@ -49,6 +51,8 @@ export interface ExportPayload {
     yolThemes: YolTheme[];
     yolSceneHints: YolSceneHint[];
     yolFeaturedEntities: YolFeaturedEntity[];
+    yolTimelinePoints: YolTimelinePoint[];
+    yolPointThemes: YolPointTheme[];
     media: Media[];
     mediaAssociations: MediaAssociation[];
   };
