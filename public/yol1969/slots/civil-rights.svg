@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+  <!-- placeholder slot: civil rights & protest (halftone documentary field) -->
+  <rect width="800" height="600" fill="#d9d2c0"/>
+  <defs><pattern id="d" width="10" height="10" patternUnits="userSpaceOnUse"><circle cx="5" cy="5" r="2.4" fill="#3a352b"/></pattern></defs>
+  <rect width="800" height="600" fill="url(#d)" opacity="0.35"/>
+  <rect x="60" y="380" width="680" height="150" fill="#26221a" opacity="0.55"/>
+  <rect x="120" y="140" width="220" height="300" fill="#4a4436" opacity="0.5"/>
+  <rect x="420" y="180" width="180" height="260" fill="#4a4436" opacity="0.4"/>
+</svg>

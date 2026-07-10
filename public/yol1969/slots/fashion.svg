@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="800" viewBox="0 0 700 800">
+  <!-- placeholder slot: fashion & counterculture (screen-print blobs) -->
+  <rect width="700" height="800" fill="#e8d8b8"/>
+  <ellipse cx="260" cy="300" rx="200" ry="240" fill="#c85a8e" opacity="0.55"/>
+  <ellipse cx="430" cy="480" rx="220" ry="200" fill="#c9962e" opacity="0.5"/>
+  <ellipse cx="350" cy="260" rx="130" ry="150" fill="#3fa877" opacity="0.4"/>
+</svg>

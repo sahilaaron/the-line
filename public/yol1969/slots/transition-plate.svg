@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300">
+  <!-- placeholder slot: graphic interlude (punch-card field) -->
+  <rect width="1200" height="300" fill="#161310"/>
+  <defs><pattern id="p" width="34" height="26" patternUnits="userSpaceOnUse">
+    <rect x="10" y="8" width="12" height="7" rx="1.5" fill="#3fa877" opacity="0.4"/>
+  </pattern></defs>
+  <rect width="1200" height="300" fill="url(#p)"/>
+</svg>

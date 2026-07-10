@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+  <!-- placeholder slot: Vietnam & conflict (dark documentary field) -->
+  <rect width="800" height="600" fill="#c9c2ae"/>
+  <defs><pattern id="d" width="9" height="9" patternUnits="userSpaceOnUse"><circle cx="4.5" cy="4.5" r="2.6" fill="#2a2018"/></pattern></defs>
+  <rect width="800" height="600" fill="url(#d)" opacity="0.4"/>
+  <path d="M0 420 L200 300 L380 380 L560 280 L800 400 L800 600 L0 600 Z" fill="#332b20" opacity="0.6"/>
+</svg>

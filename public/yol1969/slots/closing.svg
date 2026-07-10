@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="480" viewBox="0 0 1600 480">
+  <!-- placeholder slot: closing reflection (horizon + waveform) -->
+  <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#0d1522"/><stop offset="0.62" stop-color="#3a3222"/><stop offset="1" stop-color="#a4552e"/>
+  </linearGradient></defs>
+  <rect width="1600" height="480" fill="url(#g)"/>
+  <path d="M0 340 Q100 300 200 340 T400 340 T600 340 T800 340 T1000 340 T1200 340 T1400 340 T1600 340" stroke="#3fa877" stroke-width="2" fill="none" opacity="0.7"/>
+  <rect y="356" width="1600" height="124" fill="#161310"/>
+</svg>

@@ -1,0 +1,59 @@
+# --- dependencies / builds ---
+node_modules/
+.next/
+out/
+build/
+dist/
+*.tsbuildinfo
+next-env.d.ts
+
+# --- local databases / generated data (PGlite, synthetic, exports) ---
+/.pglite-data/
+/data/pglite/
+*.pglite/
+synthetic-*.json
+db-export*.json
+export-*.json
+*.export.json
+drizzle/meta/_journal.json.bak
+
+# --- benchmark / audit runtime output (reports in docs/generated/*.md stay tracked) ---
+docs/generated/*.tmp
+docs/generated/*.json
+benchmark-*.json
+
+# --- env (keep safe examples) ---
+.env
+.env.*
+!.env.example
+
+# --- test / browser artifacts ---
+test-results/
+playwright-report/
+coverage/
+*.lcov
+screenshots/
+*.webm
+*.mp4
+
+# --- root debug debris (Cycle 3 audit; deleted, kept ignored defensively) ---
+/pgtest*.mjs
+/pgfork.mjs
+/pgpersist*.mjs
+/dbgimport*.mjs
+/ztest.ts
+/zverify-api.ts
+/.trash/
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+*.swp
+
+# --- logs ---
+*.log
+npm-debug.log*
+logs/

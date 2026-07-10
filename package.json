@@ -1,0 +1,53 @@
+{
+  "name": "the-line",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/scripts/migrate.ts",
+    "db:check": "drizzle-kit check",
+    "db:reset": "tsx src/scripts/reset.ts",
+    "db:seed": "tsx src/scripts/seed.ts",
+    "db:seed:synthetic": "tsx src/scripts/seed.ts --synthetic",
+    "db:validate": "tsx src/scripts/validate.ts",
+    "db:test": "vitest run src/db",
+    "db:benchmark": "tsx src/scripts/benchmark.ts",
+    "db:audit": "tsx src/scripts/audit.ts",
+    "db:export": "tsx src/scripts/export.ts",
+    "db:import": "tsx src/scripts/import.ts"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.3.16",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.6.1",
+    "drizzle-orm": "^0.44.7",
+    "gsap": "^3.15.0",
+    "next": "^15.5.20",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "three": "^0.185.1",
+    "zod": "^4.4.3",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "@types/node": "^26.1.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@types/three": "^0.185.1",
+    "drizzle-kit": "^0.31.6",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "^15.5.20",
+    "tsx": "^4.23.0",
+    "typescript": "^5.9.3",
+    "vite": "7.3.6",
+    "vitest": "^4.1.10"
+  }
+}
