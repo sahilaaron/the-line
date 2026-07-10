@@ -1,5 +1,12 @@
 import { defineConfig } from '@playwright/test';
 
+// The e2e suite exercises the database-backed YoL, so the web server must
+// point at a migrated + seeded PGlite directory. CI seeds a throwaway dir
+// (RUNNER_TEMP) and forwards it here; locally we default to the same dev dir
+// the db:* scripts use, so `npm run db:migrate && npm run db:seed` once is
+// enough before `npm run test:e2e`.
+const PGLITE_DATA_DIR = process.env.PGLITE_DATA_DIR ?? '.pglite-data/dev';
+
 export default defineConfig({
   testDir: './e2e',
   timeout: 90_000,
@@ -17,5 +24,7 @@ export default defineConfig({
     url: 'http://localhost:3011',
     reuseExistingServer: true,
     timeout: 120_000,
+    // the server reads the seeded chronology from this PGlite directory
+    env: { PGLITE_DATA_DIR },
   },
 });

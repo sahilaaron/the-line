@@ -714,3 +714,71 @@ disconnected database, or that the stacked layout is final.
   but only smoke-checked; e2e must cover them.
 - `docs/database/schema-overview.md`, query cookbook, and stale Cycle 1
   statements in docs/02/03/04 not yet updated for the new tables.
+
+### Opus continuation — e2e rebuild, CI, docs, defect wiring (2026-07-11)
+- **e2e rewritten** for the local-timeline + DB path (`e2e/helpers.ts` +
+  `parent-line`, `local-timeline`, `fallback`, `narrow`, `reduced-motion`,
+  `synthetic-exclusion` specs). The stacked-page specs (arrival/core-loop/
+  yol-page/yol-1769) were deleted. Both 1769 and 1969 are covered against
+  `[data-testid=yol-page][data-source=database]`: initial overview, wheel
+  down = earlier, ArrowRight = later, theme lens `.dim`, return to the same
+  year. Fallback is forced deterministically by intercepting `/api/yol/**`
+  with the unseeded envelope (`{status:'not_found'}`) rather than standing up
+  a second server — the server-side empty/error envelopes stay covered by the
+  route + read-model unit tests.
+- **CI + Playwright wired to a seeded PGlite dir.** `playwright.config.ts`
+  forwards `PGLITE_DATA_DIR` (local default `.pglite-data/dev`) to the
+  webServer; CI's e2e job migrates + seeds a throwaway `${RUNNER_TEMP}/pglite`
+  before build/e2e and passes the same env to Playwright. Added `db:seed:e2e`
+  (`src/scripts/seed-e2e.ts`) = prototype seed + a TINY synthetic set (~12
+  rows) so `synthetic-exclusion.spec.ts` has teeth without the slow full
+  stress seed. The `db:test` retry policy in the quality job is untouched.
+- **`yolLineVh` defect fixed (not just recorded).** `YolPage` now publishes
+  `--yw-line-vh` from the tunable each frame; `.yw-line` uses
+  `calc(var(--yw-line-vh, 91.7) * 1vh - 0.95rem)`, so the debug slider moves
+  the DOM local Line in step with the 3D one.
+- **Docs updated:** `database/schema-overview.md` (24 tables, new YoL point
+  tables + period sub-year parts + lens_key/display_label, ER entries),
+  `database/query-cookbook.md` (`yolReadModelByAnchorSlug` + synthetic-
+  exclusion boundary), new `database/research-handoff.md` (write/read
+  contract for issue #5), and the stale Cycle-1 statements in
+  docs/02/03/04 (DB is primary; YoL is a local timeline; requestDescent/
+  requestReturn names).
+
+### Still deferred (honest)
+- **Dead stacked-layout CSS** (`.yp-hero*`, `.yp-events`, `.yp-timeline`/
+  `.yp-tl-*`, `.yp-quote`, `.yp-interlude`, `.yp-slot`, `.yp-scrollhint`,
+  `.reveal`) still lives in globals.css. Confirmed unreferenced by any
+  component, but removal is deferred until e2e is confirmed green on CI (the
+  hand-off's own condition) to avoid coupling a cosmetic sweep with the
+  behavioural rewrite. Low-risk follow-up.
+- **1969 quote + 1769 transition plate** are still not composed into the
+  station world — deferred; noted on issue #14 as a visual miss, not a
+  blocker.
+- Field/tick spacing, fades and travel still want a real-GPU tuning pass
+  (`?debug=1` sliders exist).
+
+### Verification run (Opus, 2026-07-11 — off-mount clone, Linux node_modules)
+- **eslint** — clean on all changed files (`e2e/**`, `seed-e2e.ts`,
+  `YolPage.tsx`, `playwright.config.ts`). Full `eslint .` was not run to
+  completion in-sandbox (mount-FS latency, not an error).
+- **tsc --noEmit** (full project, incl. the new `e2e/*.spec.ts`) — PASS.
+- **vitest** — `yol-view-model`, `useYolData`, `yol-read-model` suites PASS
+  (16 tests), including the authoritative synthetic-exclusion-at-the-query-
+  boundary test.
+- **db:migrate + db:seed:e2e** against a throwaway `PGLITE_DATA_DIR` — clean
+  (prototype + tiny synthetic set). A read-model probe against that seeded
+  dir returned exactly what the e2e specs assert: 1769 → 11 points, lenses
+  steam/knowledge/trade/labour, overview present; 1969 → 14 points, lenses
+  spaceflight/computing/signal/coldwar, overview present; **no synthetic
+  leak in either** despite synthetic rows being seeded.
+- **next build** (production) — PASS, with `/api/yol/[anchorSlug]` in the
+  route table.
+- **Playwright browser run — NOT executed in this sandbox.** The
+  chrome-headless-shell download is network-throttled here to the point of
+  being impractical, and no system Chromium is available. The e2e specs are
+  therefore validated statically (typecheck) and against the real seeded DB
+  content + real DOM selectors, but the live browser timing is unverified
+  locally. This is the exact job the newly-wired CI `e2e` step runs on every
+  PR (seeded `${RUNNER_TEMP}/pglite`, `next start`), which is where the
+  authoritative e2e pass + failure artifacts will come from.

@@ -2299,7 +2299,9 @@ body {
   position: absolute;
   left: 0;
   right: 0;
-  top: calc(91.7vh - 0.95rem);
+  /* driven by the yolLineVh tunable (var set by YolPage); default matches
+     the 3D local Line at 91.7vh. */
+  top: calc(var(--yw-line-vh, 91.7) * 1vh - 0.95rem);
   bottom: 0;
   z-index: 4;
   opacity: 0.25;

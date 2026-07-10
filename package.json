@@ -16,6 +16,7 @@
     "db:reset": "tsx src/scripts/reset.ts",
     "db:seed": "tsx src/scripts/seed.ts",
     "db:seed:synthetic": "tsx src/scripts/seed.ts --synthetic",
+    "db:seed:e2e": "tsx src/scripts/seed-e2e.ts",
     "db:validate": "tsx src/scripts/validate.ts",
     "db:test": "vitest run src/db",
     "db:benchmark": "tsx src/scripts/benchmark.ts",

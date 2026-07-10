@@ -119,6 +119,9 @@ export function YolPage() {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       const t = useTuning.getState();
+      // keep the DOM local Line aligned with the 3D one and the yolLineVh
+      // tunable (debug panel) — see globals.css .yw-line
+      rootRef.current?.style.setProperty('--yw-line-vh', String(t.yolLineVh));
       const count = localTimeState.count;
       if (count === 0) return;
 

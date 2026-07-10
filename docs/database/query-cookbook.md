@@ -1,4 +1,4 @@
-# Query Cookbook (Cycle 3)
+# Query Cookbook
 
 All examples assume:
 
@@ -67,6 +67,35 @@ await activeThemesOrderedByImportance(db, yol.id);
 await featuredEntities(db, yol.id);
 await nearestAvailableYolComposition(db, 1975); // falls back to nearest curated anchor
 ```
+
+### Read model for the rendered YoL (Cycle 6)
+
+`GET /api/yol/[anchorSlug]` feeds the public Year-on-Line experience through
+ONE query. It is the canonical read side of the local-timeline world:
+
+```ts
+import { yolReadModelByAnchorSlug } from '@/src/db/queries/yol-read-model';
+
+const model = await yolReadModelByAnchorSlug(db, '1969');
+// undefined            -> no composition for that slug (client -> fallback)
+// model.points.length  -> 0 means migrated-but-unseeded (route reports `empty`)
+// model.points[]       -> ordered stations (role, date parts, themes, claims,
+//                         sources, provenance); model.themes[] -> lens tags
+```
+
+Contract and BCE-safe date formatting live in `src/domain/yol-read-model.ts`;
+the API route (`app/api/yol/[anchorSlug]/route.ts`) only wraps this in a typed
+envelope and never leaks paths, SQL or stacks.
+
+**Synthetic exclusion is enforced HERE, at the query boundary.** Every join
+in `yolReadModelByAnchorSlug` filters `isSynthetic = false` (composition,
+period, theme entities, timeline points, claims, sources, media), so synthetic
+stress rows (`db:seed:synthetic`) can never reach a rendered YoL. A point's
+`provenance` is derived from `isPlaceholder` + `editorialStatus`
+(`reviewed` only when not a placeholder and in a reviewed/verified/published
+status; otherwise `placeholder`). See
+[`research-handoff.md`](./research-handoff.md) for what the research pipeline
+may write and which statuses make data publicly renderable.
 
 ## Integrity audit
 

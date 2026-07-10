@@ -1,6 +1,8 @@
 # 02 — Data Model
 
-All content data lives in `src/data/`, separate from rendering. Everything here is **placeholder** — flagged via the `placeholder: true` field. Do not present it as researched history.
+Content data is separate from rendering. Most content still lives in `src/data/` as **placeholder** (flagged `placeholder: true`) — do not present it as researched history.
+
+> **Updated in Cycle 6 (issue #14):** the rendered Year-on-Line no longer reads from `src/data/yol`. Its chronology now comes from the **database** via the read model (`src/db/queries/yol-read-model.ts` → `GET /api/yol/[anchorSlug]`); the `src/data/yol` registry survives only as the isolated fallback for an empty/unavailable database. See `docs/database/schema-overview.md` and `docs/database/research-handoff.md`.
 
 ## Types (`src/data/types.ts`)
 
@@ -34,6 +36,17 @@ interface EraMood {
 
 Ordered oldest → newest: `bce-10000`, `1450`, `1769`, `1969`, `2026`. Index in this array is the unit of scroll space (`timePos` 0–4). 2026 themes: AI, War, Climate, Energy, Space. Other anchors carry simple placeholder themes.
 
-## YoL content (`src/data/yol.ts`)
+## YoL content
 
-Per-anchor YoL copy (currently only 1969 is fleshed out): `title`, `thesis` (placeholder line), `themeLabels`. The 1969 scene motifs (spaceflight, analogue computing, signal transmission) are abstract visuals only, defined in the scene component, not data.
+**Primary source (Cycle 6): the database.** A year's local timeline is a
+`yol_compositions` row plus ordered `yol_timeline_points` (roles
+overview/development/context/closing) with `yol_point_themes` lens tags; the
+read model shapes these into one `YolReadModel` served by
+`GET /api/yol/[anchorSlug]`. Both **1769 and 1969** are fleshed out and
+draft/placeholder (no invented sources).
+
+**Fallback only:** `src/data/yol.ts` still holds per-anchor copy (`title`,
+`thesis`, `themeLabels`, events, neighbours). The client uses it solely when
+the database is empty or unavailable, marked `source: 'fallback'`. Both the
+database and fallback are normalised into one `YolViewModel`
+(`src/experience/overlay/yol-view-model.ts`) that the renderer consumes.
