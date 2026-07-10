@@ -17,6 +17,7 @@ import {
 } from '../runtime';
 import { vhLayout } from '../config';
 import { prefetchYol } from '../overlay/useYolData';
+import { prefetchWorld } from '../overlay/useWorldData';
 import { arrivalSchedule } from '../arrival';
 
 /**
@@ -61,9 +62,11 @@ export function DescentController() {
       const origin = useExperience.getState().originIndex;
       const anchor = ANCHORS[origin];
       if (!anchor) return;
-      // start resolving the destination's database content now, so it is
-      // normally ready before the clouds clear (client accessor dedupes)
-      prefetchYol(anchor.id);
+      // start resolving the destination's content now, so it is normally
+      // ready before the clouds clear (both accessors dedupe)
+      const first = useExperience.getState().worldStack[1]?.frame;
+      if (first && first.type !== 'yol') void prefetchWorld(first);
+      else prefetchYol(anchor.id);
       const { palette } = getYearIdentity(anchor.id);
       const paper = new THREE.Color(palette.paper);
       const plate = new THREE.Color(palette.plate);

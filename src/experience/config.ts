@@ -57,6 +57,38 @@ export const TUNING_DEFAULTS = {
   localTickSpacingVw: 14,
   /** vw the field content travels per local unit (parallax above the Line) */
   localFieldTravelVw: 74,
+
+  // --- Historical Field (continuous 20-year world) ---
+  /** vw of horizontal travel per historical year */
+  fieldVwPerYear: 11,
+  /** years per wheel deltaY pixel */
+  fieldYearsPerWheelPx: 0.0038,
+  /** idle ms before the field snaps to a round year */
+  fieldSnapDelayMs: 300,
+  /** exponential rate the field target eases to the snapped year */
+  fieldSnapStrength: 4.0,
+  /** years either side of the marker that stay mounted (+ overscan) */
+  fieldVisibleRadiusYears: 8,
+  fieldOverscanYears: 3,
+  /** temporal distance (years) within which items are fully interactive */
+  fieldActiveRadiusYears: 2.4,
+  /** per-year emphasis falloff (opacity / scale) with temporal distance */
+  fieldOpacityFalloff: 0.13,
+  fieldScaleFalloff: 0.035,
+  /** parallax spread between depth layers (0 = none) */
+  fieldParallax: 0.16,
+
+  // --- Topic Worlds (horizontal editorial chapters) ---
+  /** vw each chapter occupies (adjacent chapters peek at the edges) */
+  topicChapterVw: 88,
+  /** chapter units per wheel deltaY pixel */
+  topicWheelSensitivity: 0.0016,
+  topicSnapDelayMs: 260,
+  topicSnapStrength: 5.0,
+
+  // --- world push/pop shared-element transition ---
+  /** seconds for the expand/shrink plate choreography */
+  worldTransitionSec: 0.85,
 };
 
 export type Tuning = typeof TUNING_DEFAULTS;

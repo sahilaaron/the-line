@@ -7,6 +7,10 @@ import { descentState, timeState, yolReveal } from '../runtime';
 import { formatYear, yearAt } from '../time';
 import { DebugPanel } from './DebugPanel';
 import { YolPage } from './YolPage';
+import { HistoricalFieldPage } from './worlds/HistoricalFieldPage';
+import { TopicWorldPage } from './worlds/TopicWorldPage';
+import { WorldTransition } from './worlds/WorldTransition';
+import { WorldChrome } from './worlds/WorldChrome';
 import { DataLayer } from './DataLayer';
 import { LineAnchorData } from './LineAnchorData';
 
@@ -20,6 +24,7 @@ const YEARS = ANCHORS.map((a) => a.year);
  */
 export function Overlay({ debug }: { debug: boolean }) {
   const mode = useExperience((s) => s.mode);
+  const worldStack = useExperience((s) => s.worldStack);
   const activeIndex = useExperience((s) => s.activeIndex);
   const notice = useExperience((s) => s.notice);
   const lineVh = useTuning((s) => s.lineVh);
@@ -111,18 +116,43 @@ export function Overlay({ debug }: { debug: boolean }) {
       {/* seeded data layer, woven into Line View (fetches /api/line-data) */}
       <DataLayer active={inLineWorld} debug={debug} />
 
-      {/* Year on Line: scrollable collage page */}
+      {/* The world stack: the TOP frame decides which renderer is
+          front-of-house; the shared-element plate covers every swap. */}
       <div
         className={`yol-ui ${mode === 'yol' ? '' : 'hidden'}`}
         data-testid="yol-ui"
       >
-        <YolPage />
+        {(() => {
+          const top = worldStack[worldStack.length - 1];
+          if (!top) return mode === 'yol' || mode === 'descending' ? <YolPage /> : null;
+          switch (top.frame.type) {
+            case 'yol':
+              return <YolPage />;
+            case 'historical-field':
+              return <HistoricalFieldPage key={top.frame.id} frame={top.frame} />;
+            case 'topic':
+              return (
+                <TopicWorldPage
+                  key={`${top.frame.id}:${worldStack.length}`}
+                  frame={top.frame}
+                />
+              );
+            default:
+              return null;
+          }
+        })()}
+        <WorldTransition />
+        <WorldChrome />
         <div ref={dimRef} className="yol-dimmer" aria-hidden />
         <button
           ref={returnRef}
           className="return-btn"
           data-testid="return-btn"
-          onClick={() => useExperience.getState().requestReturn()}
+          onClick={() => {
+            const s = useExperience.getState();
+            if (s.worldStack.length > 2) s.returnToDepth(0);
+            else s.requestReturn();
+          }}
         >
           ↑ Return to the Line
         </button>
