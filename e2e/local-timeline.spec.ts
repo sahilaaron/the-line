@@ -51,7 +51,10 @@ for (const year of YOL_YEARS) {
 
     // ---- theme lens: non-matching developments dim, matching stay lit --
     const lens = LENS[year];
-    await page.getByTestId(`lens-${lens}`).click();
+    const lensBtn = page.getByTestId(`lens-${lens}`);
+    await lensBtn.click();
+    // clicking PINS the lens: announced pressed, and the page carries it
+    await expect(lensBtn).toHaveAttribute('aria-pressed', 'true');
     await expect(yol).toHaveAttribute('data-lens', lens);
     // at least one station is dimmed by the lens
     await expect(page.locator('.yw-station.dim').first()).toBeAttached({
@@ -64,8 +67,15 @@ for (const year of YOL_YEARS) {
     for (let i = 0; i < matchCount; i++) {
       await expect(matching.nth(i)).not.toHaveClass(/\bdim\b/);
     }
-    // clicking the same lens again releases the pin
-    await page.getByTestId(`lens-${lens}`).click();
+    // clicking the same lens again releases the PIN immediately…
+    await lensBtn.click();
+    await expect(lensBtn).toHaveAttribute('aria-pressed', 'false');
+    // …but the pointer is still hovering the button, and hover is a
+    // deliberate transient focus. Only once the pointer leaves the lens
+    // controls does the page drop the lens entirely.
+    await expect(yol).toHaveAttribute('data-lens', lens);
+    const vp = page.viewportSize()!;
+    await page.mouse.move(vp.width * 0.75, vp.height * 0.45);
     await expect(yol).not.toHaveAttribute('data-lens', lens);
 
     // ---- return lands on the SAME year on the parent Line --------------

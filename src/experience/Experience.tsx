@@ -107,6 +107,7 @@ function SceneRoot() {
 
 export default function Experience() {
   const mode = useExperience((s) => s.mode);
+  const locked = useExperience((s) => s.locked);
   const quality = useExperience((s) => s.quality);
   const debug = useMemo(
     () =>
@@ -193,6 +194,7 @@ export default function Experience() {
     <div
       className={`experience mode-${mode}`}
       data-mode={mode}
+      data-locked={locked ? 'true' : 'false'}
       style={themeVars}
     >
       <Canvas

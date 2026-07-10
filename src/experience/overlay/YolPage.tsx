@@ -46,6 +46,7 @@ import type { YolPointVM } from './yol-view-model';
 
 export function YolPage() {
   const mode = useExperience((s) => s.mode);
+  const locked = useExperience((s) => s.locked);
   const activeIndex = useExperience((s) => s.activeIndex);
   const anchor = ANCHORS[activeIndex];
   const yearId = anchor?.id ?? '';
@@ -305,8 +306,8 @@ export function YolPage() {
             className="yp-chip"
             style={{ ['--chip' as string]: lens.hue }}
             data-testid={`lens-${lens.key}`}
-            data-active={activeLens === lens.key || undefined}
-            aria-pressed={activeLens === lens.key}
+            data-active={pinnedLens === lens.key || undefined}
+            aria-pressed={pinnedLens === lens.key}
             onClick={() => {
               // clicking pins a lens (toggles); hovering is transient
               const next = pinnedLens === lens.key ? null : lens.key;
@@ -436,6 +437,7 @@ export function YolPage() {
           className="yw-step"
           data-testid="local-prev"
           aria-label="Earlier on the local timeline"
+          disabled={locked}
           onClick={() => step(-1)}
         >
           ←
@@ -444,6 +446,7 @@ export function YolPage() {
           className="yw-step"
           data-testid="local-next"
           aria-label="Later on the local timeline"
+          disabled={locked}
           onClick={() => step(1)}
         >
           →

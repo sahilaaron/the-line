@@ -16,11 +16,52 @@ import { expect, type Page } from '@playwright/test';
 
 export const YOL_YEARS = ['1769', '1969'] as const;
 
+/** Parent-Line anchors, oldest first — mirrors src/data/anchors.ts labels. */
+export const ANCHOR_LABELS = [
+  'c. 10,000 BCE',
+  '1450',
+  '1769',
+  '1969',
+  '2026',
+] as const;
+
 export async function gotoLine(page: Page): Promise<void> {
   await page.goto('/');
   await expect(page.getByTestId('year-label')).toHaveText('2026', {
     timeout: 30_000,
   });
+}
+
+/**
+ * Deterministic parent-Line navigation for TEST SETUP: step anchor by
+ * anchor with the arrow keys in whichever direction the target lies,
+ * polling for each expected anchor label. Works both backward and forward
+ * (scrollBackTo can only travel earlier). Wheel BEHAVIOUR stays covered by
+ * parent-line.spec.ts — this helper is positioning, not wheel coverage.
+ */
+export async function goToAnchor(page: Page, label: string): Promise<void> {
+  const target = ANCHOR_LABELS.indexOf(label as (typeof ANCHOR_LABELS)[number]);
+  if (target < 0) throw new Error(`unknown anchor label: ${label}`);
+  // arrow input is deliberately swallowed while a transition lock is held
+  // (e.g. immediately after a return) — wait until the Line is interactive
+  await expect(page.locator('.experience')).toHaveAttribute('data-mode', 'line');
+  await expect(page.locator('.experience')).toHaveAttribute('data-locked', 'false', {
+    timeout: 15_000,
+  });
+  for (let guard = 0; guard < ANCHOR_LABELS.length * 2; guard++) {
+    const text = (await page.getByTestId('year-label').textContent())?.trim() ?? '';
+    const current = ANCHOR_LABELS.indexOf(text as (typeof ANCHOR_LABELS)[number]);
+    if (current === target) break;
+    if (current < 0) throw new Error(`unrecognised anchor label on screen: "${text}"`);
+    const dir = target > current ? 1 : -1;
+    const expected = ANCHOR_LABELS[current + dir];
+    await page.keyboard.press(dir > 0 ? 'ArrowRight' : 'ArrowLeft');
+    await expect(page.getByTestId('year-label')).toHaveText(expected, {
+      timeout: 5_000,
+    });
+  }
+  await expect(page.getByTestId('year-label')).toHaveText(label);
+  await page.waitForTimeout(600); // let the snap settle under the lens
 }
 
 /** Travel backward along the parent Line until `label` is under the lens. */
@@ -50,6 +91,13 @@ export async function descend(page: Page): Promise<void> {
       timeout: 3_000,
     });
   }).toPass({ timeout: 25_000 });
+  // mode flips to `yol` at the mid-transition swap while the input lock is
+  // still engaged; local navigation is only ready once the lock releases
+  await expect(page.locator('.experience')).toHaveAttribute(
+    'data-locked',
+    'false',
+    { timeout: 15_000 }
+  );
   await expect(page.getByTestId('yol-page')).toBeVisible({ timeout: 15_000 });
 }
 
@@ -59,7 +107,7 @@ export async function enterYear(
   label: string,
   opts: { source?: 'database' | 'fallback' } = {}
 ) {
-  await scrollBackTo(page, label);
+  await goToAnchor(page, label);
   await descend(page);
   const yol = page.getByTestId('yol-page');
   await expect(yol).toHaveAttribute('data-year', label);
@@ -101,4 +149,9 @@ export async function returnToLine(page: Page, expectYear: string): Promise<void
     });
   }).toPass({ timeout: 20_000 });
   await expect(page.getByTestId('year-label')).toHaveText(expectYear);
+  // the ascent lock releases after the label is already correct; wait for
+  // it so the caller's next input (arrows, Earth click) always counts
+  await expect(page.locator('.experience')).toHaveAttribute('data-locked', 'false', {
+    timeout: 15_000,
+  });
 }

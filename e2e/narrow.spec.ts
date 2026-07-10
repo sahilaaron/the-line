@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { activePoint, enterYear, gotoLine, settle } from './helpers';
+import { activePoint, enterYear, gotoLine } from './helpers';
 
 /**
  * Narrow layout (a phone-width viewport): the wheel/drag world still exists,
@@ -14,14 +14,14 @@ test('480px: local prev/next buttons navigate the timeline', async ({ page }) =>
 
   const start = await activePoint(page);
 
+  // the controls are disabled while the descent lock is engaged and
+  // enterYear waits for data-locked=false, so these clicks always count
+  await expect(page.getByTestId('local-next')).toBeEnabled();
+
   // step later, then earlier, via the on-screen controls
   await page.getByTestId('local-next').click();
-  await settle(page);
-  const afterNext = await activePoint(page);
-  expect(afterNext).not.toBe(start);
+  await expect.poll(() => activePoint(page), { timeout: 5_000 }).not.toBe(start);
 
   await page.getByTestId('local-prev').click();
-  await settle(page);
-  const afterPrev = await activePoint(page);
-  expect(afterPrev).toBe(start);
+  await expect.poll(() => activePoint(page), { timeout: 5_000 }).toBe(start);
 });
