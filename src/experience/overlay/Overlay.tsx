@@ -14,7 +14,8 @@ const YEARS = ANCHORS.map((a) => a.year);
 
 /**
  * DOM overlay: fixed temporal lens, active year label, hints, notices,
- * the scrollable 1969 collage page (YolPage) and the return control.
+ * the scrollable Year on Line page (YolPage, year-driven) and the return
+ * control.
  * Readable text lives in the DOM, not in the 3D scene.
  */
 export function Overlay({ debug }: { debug: boolean }) {

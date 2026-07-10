@@ -20,6 +20,7 @@ export type AssetRole =
   | 'person'
   | 'invention'
   | 'diagram'
+  | 'map'
   | 'texture'
   | 'transition-plate';
 
@@ -42,6 +43,8 @@ export type TreatmentPreset =
   | 'contact-sheet'
   | 'halftone'
   | 'diagram-plate'
+  | 'engraved-plate'
+  | 'map-sheet'
   | 'archival-frame'
   | 'collage'
   | 'panorama'
@@ -53,17 +56,25 @@ export interface AssetRecord {
   /** file under /public; placeholder slots point at dev surfaces */
   path: string;
   role: AssetRole;
-  /** section/slot association, e.g. 'spaceflight', 'closing' */
+  /** section/slot association, e.g. 'spaceflight', 'steam', 'closing' */
   section?: string;
-  /** 0..1 focal point used by 'focal' cropping */
+  /** 0..1 focal point used by 'focal' cropping and responsive crops */
   focal?: { x: number; y: number };
   crop?: CropBehaviour;
+  /** preferred aspect ratio for the final artwork, e.g. '4 / 3' */
+  aspectRatio?: string;
   treatment?: TreatmentPreset;
   alt: string;
   caption?: string;
   sourceType: AssetSourceType;
   rights: AssetRights;
   attribution?: string;
+  /**
+   * Whether this record still points at a placeholder surface or at the
+   * final artwork. Final generated images replace placeholders by swapping
+   * `path` (+ flipping this) — never by rewriting layout.
+   */
+  assetState: 'placeholder' | 'final';
 }
 
 /* ---------- palette ---------- */
@@ -82,11 +93,11 @@ export interface IdentityPalette {
   /** light inks for text on plate sections */
   plateInk: string;
   plateInkMuted: string;
-  /** period accent (e.g. 1969 rust) */
+  /** period accent (e.g. 1969 rust, 1769 oxide) */
   accent: string;
-  /** secondary accent (e.g. ochre) */
+  /** secondary accent (e.g. ochre, brass) */
   accentAlt: string;
-  /** analogue signal colour (e.g. oscilloscope green) */
+  /** analogue signal colour (e.g. oscilloscope green, cartographic blue) */
   signal: string;
   /** restrained warning red */
   warning: string;
@@ -125,13 +136,17 @@ export interface IdentityLayout {
   gutter: string;
   /** hero grid template (left column vs art) */
   heroSplit: string;
-  /** alternate section sides */
+  /** alternate section sides (broadsheet years may keep one measured side) */
   alternate: boolean;
   sectionGap: string;
+  /** border-radius shorthand for the hero art block (period shape language) */
+  heroArtRadius?: string;
+  /** decorative motif on the hero title block (e.g. crop marks, folios) */
+  heroMotif?: MotifId;
 }
 
 export interface IdentityMedia {
-  /** 0..1 period grain strength over imagery */
+  /** 0..1 period grain/paper strength over imagery */
   grainOpacity: number;
   /** halftone dot cell size (CSS length) */
   halftoneSize: string;
@@ -156,6 +171,7 @@ export interface IdentityMotion {
 /* ---------- motifs / themes ---------- */
 
 export type MotifId =
+  /* 1969 — print/broadcast modernism */
   | 'orbital-diagram'
   | 'scanlines'
   | 'halftone-dots'
@@ -164,7 +180,14 @@ export type MotifId =
   | 'crop-marks'
   | 'registration-marks'
   | 'screen-print'
-  | 'contact-sheet-strip';
+  | 'contact-sheet-strip'
+  /* 1769 — mechanism / measurement / engraved knowledge */
+  | 'engraved-rules'
+  | 'plate-mark'
+  | 'graticule'
+  | 'gear-section'
+  | 'hatching'
+  | 'folio-marks';
 
 /** Per-theme visual overrides inside the year (lens substyles). */
 export interface ThemeSubstyle {
@@ -186,7 +209,7 @@ export interface YearVisualIdentity {
   motion: IdentityMotion;
   /** dominant motifs available to sections of this year */
   motifs: MotifId[];
-  /** keyed by theme focus key (spaceflight, computing, …) or substyle name */
+  /** keyed by theme focus key (spaceflight, steam, …) or substyle name */
   themes: Record<string, ThemeSubstyle>;
   assets: AssetRecord[];
   /** short design rationale (docs, not UI) */

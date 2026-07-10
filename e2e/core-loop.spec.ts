@@ -52,11 +52,15 @@ test('core loop: line → 1969 → descent → YoL → return', async ({ page })
   await page.waitForTimeout(300);
   await expect(page.getByTestId('yol-title')).toHaveText('1969');
 
-  // return to the Line at 1969
-  await page.getByTestId('return-btn').click();
-  await expect(page.getByTestId('yol-ui')).toHaveClass(/hidden/, {
-    timeout: 15_000,
-  });
+  // return to the Line at 1969. The transition lock intentionally
+  // swallows clicks while the arrival completes, so retry like a real
+  // user rather than asserting on a single click.
+  await expect(async () => {
+    await page.getByTestId('return-btn').click();
+    await expect(page.getByTestId('yol-ui')).toHaveClass(/hidden/, {
+      timeout: 3_000,
+    });
+  }).toPass({ timeout: 20_000 });
   await expect(page.getByTestId('year-label')).toHaveText('1969');
 });
 

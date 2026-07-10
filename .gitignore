@@ -57,3 +57,14 @@ Desktop.ini
 *.log
 npm-debug.log*
 logs/
+
+# --- temporary review evidence (issue/PR verification media) ---
+# Attach visual evidence to GitHub PR comments or keep it as CI artifacts.
+# Markdown documentation in docs/evidence/ remains tracked; binaries do not.
+docs/evidence/**/*.png
+docs/evidence/**/*.jpg
+docs/evidence/**/*.jpeg
+docs/evidence/**/*.gif
+docs/evidence/**/*.webp
+docs/evidence/**/*.webm
+docs/evidence/**/*.mp4

@@ -52,8 +52,9 @@ export const ANCHORS: Anchor[] = [
     subtitle: 'Age of Enlightenment',
     themes: [
       { id: 'steam', label: 'Steam', color: '#d97b3f' },
-      { id: 'reason', label: 'Reason', color: '#c9c37f' },
-      { id: 'industry', label: 'Industry', color: '#a08f7a' },
+      { id: 'knowledge', label: 'Knowledge', color: '#e0c36a' },
+      { id: 'trade', label: 'Trade', color: '#8fa8b8' },
+      { id: 'labour', label: 'Labour', color: '#b08d6a' },
     ],
     era: {
       tint: '#d97b3f',

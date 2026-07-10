@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { ANCHORS, INDEX_1969, INDEX_2026 } from '@/src/data/anchors';
+import { hasYol, YOL_YEAR_IDS } from '@/src/data/yol';
 import {
   TUNING_DEFAULTS,
   type QualityTier,
@@ -12,6 +13,8 @@ interface ExperienceState {
   mode: Mode;
   /** nearest anchor index (discrete; continuous position lives in runtime.ts) */
   activeIndex: number;
+  /** the anchor index a descent started from — the return restores it */
+  originIndex: number;
   /** input lock during descent/return transitions */
   locked: boolean;
   notice: string | null;
@@ -34,6 +37,7 @@ interface ExperienceState {
 export const useExperience = create<ExperienceState>((set, get) => ({
   mode: 'line',
   activeIndex: INDEX_2026,
+  originIndex: INDEX_1969,
   locked: false,
   notice: null,
   quality: 'high',
@@ -47,13 +51,21 @@ export const useExperience = create<ExperienceState>((set, get) => ({
     if (s.locked || s.mode !== 'line') return false;
     const anchor = ANCHORS[index];
     if (!anchor) return false;
-    if (anchor.id !== '1969') {
+    if (!hasYol(anchor.id)) {
       set({
-        notice: 'Descent is prototyped for 1969 only — travel there to enter the year.',
+        notice: `Descent is prototyped for ${YOL_YEAR_IDS.join(
+          ' and '
+        )} — travel there to enter a year.`,
       });
       return false;
     }
-    set({ mode: 'descending', locked: true, notice: null });
+    set({
+      mode: 'descending',
+      locked: true,
+      notice: null,
+      originIndex: index,
+      activeIndex: index,
+    });
     return true;
   },
 
@@ -67,7 +79,8 @@ export const useExperience = create<ExperienceState>((set, get) => ({
     return true;
   },
 
-  commitLine: () => set({ mode: 'line', activeIndex: INDEX_1969 }),
+  /** Return lands on the SAME anchor the descent started from. */
+  commitLine: () => set((s) => ({ mode: 'line', activeIndex: s.originIndex })),
   finishReturn: () => set({ locked: false }),
 
   setNotice: (n) => set({ notice: n }),

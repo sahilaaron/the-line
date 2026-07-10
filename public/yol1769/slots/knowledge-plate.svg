@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+  <!-- placeholder slot: engraved encyclopaedia sheet — instrument and specimen figures. no text -->
+  <rect width="800" height="600" fill="#d5c49e"/>
+  <rect x="30" y="30" width="740" height="540" fill="none" stroke="#211b16" stroke-width="1" opacity="0.55"/>
+  <line x1="400" y1="30" x2="400" y2="570" stroke="#211b16" stroke-width="0.7" opacity="0.4"/>
+  <line x1="30" y1="300" x2="770" y2="300" stroke="#211b16" stroke-width="0.7" opacity="0.4"/>
+  <circle cx="215" cy="165" r="86" fill="none" stroke="#211b16" stroke-width="1.4" opacity="0.6"/>
+  <circle cx="215" cy="165" r="54" fill="none" stroke="#a57a3a" stroke-width="1" opacity="0.6"/>
+  <rect x="470" y="90" width="240" height="150" fill="none" stroke="#211b16" stroke-width="1.2" opacity="0.6"/>
+  <path d="M 480 230 L 590 110 L 700 230 Z" fill="#65717a" opacity="0.25"/>
+  <rect x="120" y="360" width="180" height="160" fill="none" stroke="#211b16" stroke-width="1.2" opacity="0.55"/>
+  <circle cx="590" cy="440" r="80" fill="none" stroke="#211b16" stroke-width="1.2" stroke-dasharray="5 5" opacity="0.55"/>
+  <circle cx="590" cy="440" r="16" fill="#8e4d32" opacity="0.5"/>
+</svg>

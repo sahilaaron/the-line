@@ -39,6 +39,7 @@ const ASSETS_1969: AssetRecord[] = [
     sourceType: 'reconstructed',
     rights: 'not-applicable',
     attribution: 'Illustrative reconstruction, project-directed',
+    assetState: 'final',
   },
   {
     id: 'spaceflight-main',
@@ -52,6 +53,7 @@ const ASSETS_1969: AssetRecord[] = [
     caption: 'Saturn-class launch vehicle — reconstruction',
     sourceType: 'reconstructed',
     rights: 'not-applicable',
+    assetState: 'final',
   },
   {
     id: 'signal-main',
@@ -64,6 +66,7 @@ const ASSETS_1969: AssetRecord[] = [
     caption: 'The broadcast relay — reconstruction',
     sourceType: 'reconstructed',
     rights: 'not-applicable',
+    assetState: 'final',
   },
   {
     id: 'computing-main',
@@ -76,6 +79,7 @@ const ASSETS_1969: AssetRecord[] = [
     caption: 'Two nodes, one message — reconstruction',
     sourceType: 'reconstructed',
     rights: 'not-applicable',
+    assetState: 'final',
   },
   {
     id: 'conflict-main',
@@ -88,6 +92,7 @@ const ASSETS_1969: AssetRecord[] = [
     caption: 'Moratorium day crowds — reconstruction',
     sourceType: 'reconstructed',
     rights: 'not-applicable',
+    assetState: 'final',
   },
   {
     id: 'counterculture-main',
@@ -100,6 +105,7 @@ const ASSETS_1969: AssetRecord[] = [
     caption: 'Three days of music — reconstruction',
     sourceType: 'reconstructed',
     rights: 'not-applicable',
+    assetState: 'final',
   },
   {
     id: 'ordinary-life-main',
@@ -112,6 +118,7 @@ const ASSETS_1969: AssetRecord[] = [
     caption: 'A street, any street — reconstruction',
     sourceType: 'reconstructed',
     rights: 'not-applicable',
+    assetState: 'final',
   },
 
   /* ---- named slots awaiting externally generated imagery ---- */
@@ -124,6 +131,7 @@ const ASSETS_1969: AssetRecord[] = [
     alt: 'Placeholder slot: civil rights and protest imagery (to be generated)',
     sourceType: 'placeholder',
     rights: 'not-applicable',
+    assetState: 'placeholder',
   },
   {
     id: 'slot-vietnam',
@@ -134,6 +142,7 @@ const ASSETS_1969: AssetRecord[] = [
     alt: 'Placeholder slot: Vietnam and conflict imagery (to be generated)',
     sourceType: 'placeholder',
     rights: 'not-applicable',
+    assetState: 'placeholder',
   },
   {
     id: 'slot-fashion',
@@ -144,6 +153,7 @@ const ASSETS_1969: AssetRecord[] = [
     alt: 'Placeholder slot: fashion and counterculture imagery (to be generated)',
     sourceType: 'placeholder',
     rights: 'not-applicable',
+    assetState: 'placeholder',
   },
   {
     id: 'slot-closing',
@@ -154,6 +164,7 @@ const ASSETS_1969: AssetRecord[] = [
     alt: 'Placeholder slot: closing reflection atmosphere (to be generated)',
     sourceType: 'placeholder',
     rights: 'not-applicable',
+    assetState: 'placeholder',
   },
   {
     id: 'slot-transition-plate',
@@ -163,6 +174,7 @@ const ASSETS_1969: AssetRecord[] = [
     alt: 'Placeholder slot: graphic interlude / transition plate (to be generated)',
     sourceType: 'placeholder',
     rights: 'not-applicable',
+    assetState: 'placeholder',
   },
   {
     id: 'texture-grain',
@@ -171,6 +183,7 @@ const ASSETS_1969: AssetRecord[] = [
     alt: 'Film-grain texture tile (generated in-project, decorative)',
     sourceType: 'generated',
     rights: 'not-applicable',
+    assetState: 'final',
   },
 ];
 
@@ -207,6 +220,8 @@ export const IDENTITY_1969: YearVisualIdentity = {
     heroSplit: 'minmax(340px, 31vw) 1fr',
     alternate: true,
     sectionGap: '12vh',
+    heroArtRadius: '0 0 0 260px',
+    heroMotif: 'crop-marks',
   },
   media: {
     grainOpacity: 0.13,

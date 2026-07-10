@@ -1,70 +1,72 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ANCHORS } from '@/src/data/anchors';
+import { getYolYear } from '@/src/data/yol';
 import {
-  YOL_CONTENT,
-  YOL_EVENTS_1969,
-  YOL_NEIGHBOURS_1969,
-  YOL_QUOTE_1969,
-} from '@/src/data/yol';
-import { ANCHORS, INDEX_1969 } from '@/src/data/anchors';
-import { getAsset, getYearIdentity } from '@/src/data/identity';
+  getAsset,
+  getRoleAsset,
+  getSectionAsset,
+  getYearIdentity,
+} from '@/src/data/identity';
 import { useExperience } from '../store';
-import { motionPref, themeFocus, yolReveal, type ThemeFocusKey } from '../runtime';
+import {
+  motionPref,
+  setThemeLenses,
+  themeFocus,
+  yolReveal,
+} from '../runtime';
 import { identityCssVars } from './identity-css';
 import { MediaFrame } from './media/MediaFrame';
 
 /**
- * Theme lenses — STRUCTURAL identity, constant across years: each lens
- * carries the same colour as its theme sphere in Line View
- * (src/data/anchors.ts) and the same orb geometry, so `Computing` here is
- * visibly the Computing force seen around the Temporal Earth.
- */
-const ANCHOR_1969_THEMES = ANCHORS[INDEX_1969].themes;
-const themeColor = (key: string) =>
-  ANCHOR_1969_THEMES.find((t) => t.id.replace('-', '') === key)?.color ??
-  '#d8dee8';
-
-const LENSES: { key: ThemeFocusKey; label: string; hue: string }[] = [
-  { key: 'spaceflight', label: 'Spaceflight', hue: themeColor('spaceflight') },
-  { key: 'computing', label: 'Computing', hue: themeColor('computing') },
-  { key: 'signal', label: 'Signal', hue: themeColor('signal') },
-  { key: 'coldwar', label: 'Cold War', hue: themeColor('coldwar') },
-];
-
-/** Which manifest asset illustrates each event section. */
-const SECTION_ASSET: Record<string, string> = {
-  spaceflight: 'spaceflight-main',
-  signal: 'signal-main',
-  computing: 'computing-main',
-  coldwar: 'conflict-main',
-  counterculture: 'counterculture-main',
-  'ordinary-life': 'ordinary-life-main',
-};
-
-/**
- * The 1969 Year-on-Line page, rendered THROUGH the year's visual identity
- * (src/data/identity/year-1969.ts): space-age editorial modernism on warm
- * paper, documentary print for conflict, analogue broadcast/computing on
- * dark plates, counterculture colour only where it belongs. The Line strip
- * at the bottom, the active-year pulse, theme behaviour and caption
- * conventions are structural and shared with Line View.
+ * The Year-on-Line page. Fully year-driven: the active anchor selects the
+ * year's CONTENT (src/data/yol registry) and its VISUAL IDENTITY
+ * (src/data/identity registry). Nothing here is specific to any single
+ * year — 1969 and 1769 render through the same structure.
  *
- * All period styling comes from `--yr-*` CSS variables set here from the
- * identity — components/sections carry no hard-coded year styling.
+ * Structural identity, constant across years: the Line strip and its pulse,
+ * theme lenses carrying the same colours as their theme spheres in Line
+ * View, caption/provenance conventions, the return control, arrival
+ * choreography. Period styling comes ONLY from `--yr-*` CSS variables set
+ * here from the identity.
  */
+
+/** Lens keys are normalised anchor theme ids ('cold-war' → 'coldwar'). */
+const lensKey = (themeId: string) => themeId.replace(/-/g, '');
+
 export function YolPage() {
   const mode = useExperience((s) => s.mode);
-  const yol = YOL_CONTENT['1969'];
-  const identity = getYearIdentity('1969');
+  const activeIndex = useExperience((s) => s.activeIndex);
+  const anchor = ANCHORS[activeIndex];
+  const yearId = anchor?.id ?? '';
+  const year = getYolYear(yearId);
+  const identity = getYearIdentity(yearId);
 
-  const [activeLens, setActiveLens] = useState<ThemeFocusKey | null>(null);
+  /** Theme lenses: same colour + orb as the theme spheres orbiting the
+   *  Temporal Earth (structural); long-form labels from the year content. */
+  const lenses = useMemo(() => {
+    if (!anchor || !year) return [];
+    return anchor.themes.map((t, i) => ({
+      key: lensKey(t.id),
+      label: year.content.themeLabels[i] ?? t.label,
+      hue: t.color,
+    }));
+  }, [anchor, year]);
+
+  const [activeLens, setActiveLens] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const headRef = useRef<HTMLDivElement>(null);
   const thesisRef = useRef<HTMLParagraphElement>(null);
   const chipsRef = useRef<HTMLDivElement>(null);
   const hintRef = useRef<HTMLDivElement>(null);
   const lineRef = useRef<HTMLElement>(null);
+
+  // install this year's lens keys into the shared runtime focus state
+  useEffect(() => {
+    setThemeLenses(lenses.map((l) => l.key));
+    setActiveLens(null);
+  }, [lenses]);
 
   // arrival choreography: hero elements read yolReveal each frame
   useEffect(() => {
@@ -108,7 +110,7 @@ export function YolPage() {
     );
     root.querySelectorAll('.reveal').forEach((el) => io.observe(el));
     return () => io.disconnect();
-  }, []);
+  }, [yearId]);
 
   // Restrained depth: imagery drifts slightly slower than the page.
   // Transform-only, one rAF per scroll burst, skipped under reduced motion.
@@ -126,7 +128,9 @@ export function YolPage() {
       });
       const hero = root.querySelector<HTMLElement>('.yp-hero-art');
       if (hero) {
-        hero.style.backgroundPosition = `center calc(50% + ${(
+        const fx = hero.dataset.fx ?? '50%';
+        const fy = hero.dataset.fy ?? '50%';
+        hero.style.backgroundPosition = `${fx} calc(${fy} + ${(
           root.scrollTop * 0.06
         ).toFixed(1)}px)`;
       }
@@ -140,41 +144,47 @@ export function YolPage() {
       root.removeEventListener('scroll', onScroll);
       if (raf) cancelAnimationFrame(raf);
     };
-  }, []);
+  }, [yearId]);
 
-  const focusLens = (key: ThemeFocusKey | null) => {
-    (Object.keys(themeFocus.target) as ThemeFocusKey[]).forEach((k) => {
+  const focusLens = (key: string | null) => {
+    Object.keys(themeFocus.target).forEach((k) => {
       themeFocus.target[k] = k === key ? 1 : 0;
     });
     setActiveLens(key);
   };
 
-  const heroAsset = getAsset(identity, 'hero-opening');
-  const vietnamSlot = getAsset(identity, 'slot-vietnam');
-  const civilRightsSlot = getAsset(identity, 'slot-civil-rights');
-  const fashionSlot = getAsset(identity, 'slot-fashion');
-  const closingSlot = getAsset(identity, 'slot-closing');
+  if (!year) return null;
+
+  const heroAsset = getRoleAsset(identity, 'hero');
+  const closingAsset = getRoleAsset(identity, 'atmosphere');
+  const interludeAssets = year.interludeAssetIds
+    .map((id) => getAsset(identity, id))
+    .filter((a): a is NonNullable<typeof a> => a !== null);
+  const heroMotifClass = identity.layout.heroMotif
+    ? ` motif-${identity.layout.heroMotif}`
+    : '';
 
   return (
     <div
       ref={scrollRef}
       className="yol-page"
       data-lens={activeLens ?? undefined}
+      data-year={yearId}
       data-testid="yol-page"
       style={identityCssVars(identity) as React.CSSProperties}
     >
-      {/* hero: split editorial, crop-marked title column, period display type */}
-      <section className="yp-hero motif-cropmarks">
+      {/* hero: period display type; decorations come from the identity */}
+      <section className={`yp-hero${heroMotifClass}`}>
         <div className="yp-col">
           <div ref={headRef} className="yp-head">
             <div className="yp-kicker">Year on Line</div>
             <h2 className="yp-title" data-testid="yol-title">
-              {yol.title}
+              {year.content.title}
             </h2>
             <div className="yp-rule" aria-hidden />
           </div>
           <p ref={thesisRef} className="yp-thesis">
-            {yol.thesis}
+            {year.content.thesis}
           </p>
           <div
             ref={chipsRef}
@@ -182,13 +192,14 @@ export function YolPage() {
             role="group"
             aria-label="Theme lenses — focus to re-weight the year"
           >
-            {LENSES.map((lens) => (
+            {lenses.map((lens) => (
               <button
                 key={lens.key}
                 className="yp-chip"
                 style={{ ['--chip' as string]: lens.hue }}
                 data-testid={`lens-${lens.key}`}
                 data-active={activeLens === lens.key || undefined}
+                aria-pressed={activeLens === lens.key}
                 onMouseEnter={() => focusLens(lens.key)}
                 onMouseLeave={() => focusLens(null)}
                 onFocus={() => focusLens(lens.key)}
@@ -207,24 +218,38 @@ export function YolPage() {
           className="yp-hero-art"
           role="img"
           aria-label={heroAsset?.alt}
+          data-state={heroAsset?.assetState}
+          data-fx={heroAsset?.focal ? `${Math.round(heroAsset.focal.x * 100)}%` : undefined}
+          data-fy={heroAsset?.focal ? `${Math.round(heroAsset.focal.y * 100)}%` : undefined}
           style={
             heroAsset
-              ? { backgroundImage: `url('${heroAsset.path}')` }
+              ? {
+                  backgroundImage: `url('${heroAsset.path}')`,
+                  backgroundPosition: heroAsset.focal
+                    ? `${Math.round(heroAsset.focal.x * 100)}% ${Math.round(heroAsset.focal.y * 100)}%`
+                    : undefined,
+                }
               : undefined
           }
         />
       </section>
 
-      {/* event sections, each through its identity substyle */}
+      {/* event sections, each through its identity substyle; the asset that
+          illustrates a section is resolved from the manifest, never by id */}
       <div className="yp-events">
-        {YOL_EVENTS_1969.map((ev, i) => {
+        {year.events.map((ev, i) => {
           const sub = identity.themes[ev.section];
-          const asset = getAsset(identity, SECTION_ASSET[ev.section] ?? '');
+          const asset = getSectionAsset(identity, ev.section);
           const surface = sub?.surface ?? 'paper';
+          const flip = identity.layout.alternate && i % 2 === 1;
+          const dim =
+            activeLens !== null && !ev.themes.includes(activeLens);
           return (
             <section
               key={ev.id}
-              className={`yp-event reveal${i % 2 ? ' flip' : ''} surface-${surface}`}
+              className={`yp-event reveal${flip ? ' flip' : ''} surface-${surface}${
+                dim ? ' dim' : ''
+              }`}
               data-themes={ev.themes.join(' ')}
               data-section={ev.section}
               data-motif={sub?.motif}
@@ -241,11 +266,11 @@ export function YolPage() {
                 <p className="yp-event-text">{ev.text}</p>
                 <div className="yp-event-tags">
                   {ev.themes.map((t) => {
-                    const lens = LENSES.find((l) => l.key === t);
+                    const lens = lenses.find((l) => l.key === t);
                     return (
                       <span key={t} style={{ ['--chip' as string]: lens?.hue }}>
                         <i className="yp-orb" aria-hidden />
-                        {lens?.label}
+                        {lens?.label ?? t}
                       </span>
                     );
                   })}
@@ -256,44 +281,58 @@ export function YolPage() {
         })}
       </div>
 
-      {/* documentary interlude: named slots awaiting externally generated
-          imagery (dev surfaces, clearly labelled in the DOM, no baked text) */}
-      <section className="yp-interlude reveal" aria-label="Image slots awaiting generated imagery">
-        {[vietnamSlot, civilRightsSlot, fashionSlot].map(
-          (slot) =>
-            slot && (
-              <div key={slot.id} className="yp-slot">
-                <MediaFrame asset={slot} identity={identity} treatment="archival-frame" />
+      {/* interlude plates: finished assets read as a quiet measured moment;
+          placeholder slots stay visibly provisional dev surfaces */}
+      {interludeAssets.length > 0 && (
+        <section
+          className={`yp-interlude reveal${
+            interludeAssets.length === 1 ? ' single' : ''
+          }`}
+          aria-label="Interlude plates"
+        >
+          {interludeAssets.map((slot) => (
+            <div key={slot.id} className="yp-slot">
+              <MediaFrame
+                asset={slot}
+                identity={identity}
+                treatment={
+                  slot.assetState === 'placeholder' ? 'archival-frame' : undefined
+                }
+              />
+              {slot.assetState === 'placeholder' && (
                 <span className="yp-slot-id">slot: {slot.section}</span>
-              </div>
-            )
-        )}
-      </section>
+              )}
+            </div>
+          ))}
+        </section>
+      )}
 
-      {/* quote: newspaper pull-quote */}
-      <section className="yp-quote reveal">
-        <blockquote>
-          <span className="yp-qmark">“</span>
-          {YOL_QUOTE_1969.text}
-          <span className="yp-qmark">”</span>
-        </blockquote>
-        <cite>— {YOL_QUOTE_1969.attribution}</cite>
-      </section>
+      {/* pull-quote — only when the year has a VERIFIED quotation */}
+      {year.quote && (
+        <section className="yp-quote reveal">
+          <blockquote>
+            <span className="yp-qmark">“</span>
+            {year.quote.text}
+            <span className="yp-qmark">”</span>
+          </blockquote>
+          <cite>— {year.quote.attribution}</cite>
+        </section>
+      )}
 
       {/* closing reflection: panoramic atmosphere + integrity note */}
       <section className="yp-closing reveal">
-        {closingSlot && (
+        {closingAsset && (
           <MediaFrame
-            asset={closingSlot}
+            asset={closingAsset}
             identity={identity}
             treatment="panorama"
             captioned={false}
           />
         )}
         <p className="yp-note">
-          Collage artwork and illustrations are illustrative reconstructions,
-          not archival media. Event summaries are placeholders pending
-          editorial verification.
+          Artwork is project-directed generated illustration, illustrative
+          reconstruction or a placeholder slot — never archival media. Event
+          summaries are placeholders pending editorial verification.
         </p>
       </section>
 
@@ -302,7 +341,7 @@ export function YolPage() {
           same pulse rhythm. It resolves back into the main Line on return. */}
       <footer ref={lineRef} className="yp-timeline">
         <div className="yp-tl-line" aria-hidden />
-        {YOL_NEIGHBOURS_1969.map((n) => (
+        {year.neighbours.map((n) => (
           <div key={n.year} className={`yp-tl-year${n.active ? ' active' : ''}`}>
             <i className="yp-tl-tick" aria-hidden />
             {n.active && <i className="yp-tl-pulse" aria-hidden />}

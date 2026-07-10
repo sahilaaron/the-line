@@ -1,8 +1,10 @@
-import type { YearVisualIdentity } from './types';
+import type { AssetRecord, AssetRole, YearVisualIdentity } from './types';
 import { IDENTITY_1969 } from './year-1969';
+import { IDENTITY_1769 } from './year-1769';
 
 export * from './types';
 export { IDENTITY_1969 } from './year-1969';
+export { IDENTITY_1769 } from './year-1769';
 
 /**
  * Fallback identity: the restrained, near-timeless voice a year gets before
@@ -70,6 +72,7 @@ export const DEFAULT_IDENTITY: YearVisualIdentity = {
 };
 
 const IDENTITIES: Record<string, YearVisualIdentity> = {
+  '1769': IDENTITY_1769,
   '1969': IDENTITY_1969,
 };
 
@@ -82,4 +85,35 @@ export function getYearIdentity(yearId: string): YearVisualIdentity {
 /** Look up an asset in an identity's manifest. */
 export function getAsset(identity: YearVisualIdentity, id: string) {
   return identity.assets.find((a) => a.id === id) ?? null;
+}
+
+/** First asset carrying a given role (hero, atmosphere, texture, …). */
+export function getRoleAsset(
+  identity: YearVisualIdentity,
+  role: AssetRole
+): AssetRecord | null {
+  return identity.assets.find((a) => a.role === role) ?? null;
+}
+
+/** Roles that can illustrate an event/lens section. */
+const SECTION_ROLES: AssetRole[] = [
+  'event',
+  'diagram',
+  'map',
+  'editorial-illustration',
+  'invention',
+  'person',
+];
+
+/** The asset that illustrates a page section, resolved from the manifest
+ *  (never hard-coded per year in components). */
+export function getSectionAsset(
+  identity: YearVisualIdentity,
+  section: string
+): AssetRecord | null {
+  return (
+    identity.assets.find(
+      (a) => a.section === section && SECTION_ROLES.includes(a.role)
+    ) ?? null
+  );
 }

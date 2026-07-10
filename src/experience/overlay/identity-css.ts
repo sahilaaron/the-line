@@ -1,3 +1,4 @@
+import { getRoleAsset } from '@/src/data/identity';
 import type {
   TypographyRole,
   YearVisualIdentity,
@@ -21,6 +22,7 @@ function roleVars(prefix: string, role: TypographyRole): Record<string, string> 
 
 export function identityCssVars(id: YearVisualIdentity): Record<string, string> {
   const p = id.palette;
+  const texture = getRoleAsset(id, 'texture');
   return {
     /* palette */
     '--yr-paper': p.paper,
@@ -47,7 +49,10 @@ export function identityCssVars(id: YearVisualIdentity): Record<string, string> 
     '--yr-maxw': id.layout.maxWidth,
     '--yr-gutter': id.layout.gutter,
     '--yr-hero-split': id.layout.heroSplit,
+    '--yr-hero-art-radius': id.layout.heroArtRadius ?? '0',
     '--yr-gap': id.layout.sectionGap,
+    /* period paper/grain texture tile, from the manifest (role: texture) */
+    '--yr-texture': texture ? `url('${texture.path}')` : 'none',
     /* motion */
     '--yr-rise': id.motion.revealRise,
     '--yr-dur': id.motion.revealDuration,

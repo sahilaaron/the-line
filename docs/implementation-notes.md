@@ -488,3 +488,137 @@ kept where they matched the new brief.
 - Generated imagery for the named slots; identity configs for other years;
   richer licensed display fonts (document in year-visual-identity.md
   first); real-GPU pass on descent warmth + plate contrast.
+
+## Cycle 5b — Proof of reuse: 1769 YoL (issue #2, 2026-07-10)
+
+### What this cycle proved
+The Year Visual Identity system now renders two historically distinct years
+(1969 space-age editorial vs 1769 engraved broadsheet) through ONE structure:
+same YolPage component, same MediaFrame, same descent/return choreography,
+same Line strip/lens/caption conventions. No year is special-cased in any
+shared component.
+
+### 1969-specific assumptions removed
+- `store.requestDescent` 1969-only gate → any year in the YoL content
+  registry (`src/data/yol/`); notice text derives from the registry.
+- `commitLine`/`DescentController` returned to `INDEX_1969` → the store now
+  records `originIndex` at descent and the return restores it (descend from
+  1769, return to 1769 — covered by unit + e2e tests).
+- `YolPage` hard-coded 1969 content/identity/lenses/asset ids → fully
+  year-driven from the active anchor; section imagery resolves from the
+  manifest by section+role (`getSectionAsset`), hero/atmosphere/texture by
+  role (`getRoleAsset`).
+- `runtime.themeFocus` frozen 4-key set → dynamic keys installed per year via
+  `setThemeLenses` (defaults to the 1969 set for legacy code/tests).
+- `globals.css` lens dimming enumerated 1969 keys → the page computes a
+  generic `.dim` class from the active year's lens keys.
+- Hard-coded hero arc (260px) + crop-marks class + 1969 grain texture URL in
+  CSS → `--yr-hero-art-radius`, `layout.heroMotif`, `--yr-texture` (from the
+  manifest's `texture` role asset).
+- Event alternation now respects `identity.layout.alternate`
+  (1769 keeps one measured broadsheet side).
+- Descent atmosphere: cloud warm tones + YoL sky were fixed 1969-ish colours
+  → `destinationStyle` runtime set from the destination identity's palette
+  (paper/plate/sky) when a descent starts.
+
+### Intentionally retained (documented, not defects)
+- `scenes/YolScene.tsx` legacy 3D tableau (unmounted) still carries 1969
+  uniform names; untouched because it is not rendered.
+- Five-anchor scroll model and descent camera path are structural.
+- `YOL_CONTENT` kept as a derived view for the DB seed layer.
+
+### Model changes
+- `AssetRecord`: + required `assetState: 'placeholder' | 'final'`,
+  + optional `aspectRatio`; roles + `map`; treatments + `engraved-plate`,
+  `map-sheet`; motifs + `engraved-rules`, `plate-mark`, `graticule`,
+  `gear-section`, `hatching`, `folio-marks`.
+- `IdentityLayout`: + `heroArtRadius`, `heroMotif`.
+- New content registry `src/data/yol/{index,year-1969,year-1769}.ts`
+  (events/neighbours/optional quote/interlude slots per year). 1769 has no
+  quote — none verified, none fabricated.
+- MediaFrame: missing files degrade to a labelled `.mf-missing-plate`;
+  `data-state` exposes placeholder/final for styling and tests.
+
+### 1769 direction (see identity notes field)
+Rag paper #d8c7a3 / ink / oxide / brass / soot / faded blue; Baskerville
+display + Palatino body + Copperplate annotation stacks; plate marks,
+hatching, graticule, gear-section, folio marks; alternate=false; mechanical
+easing (0.65,0,0.25,1), 14px/0.65s reveals. inkBody lightened one step from
+raw ink for long-form legibility (documented palette adjustment).
+
+### Verification (sandbox, software-rendered)
+- eslint clean; tsc clean; vitest 49 passing incl. new identity/yol/store/
+  runtime suites; db seed tests pass (YOL_CONTENT compatibility).
+- `next build` exit 0 (same 45s-cap retry pattern as cycle 5).
+- Playwright: all 11 e2e tests pass (4 core-loop + 3 arrival + 2 yol-page
+  regression, 2 new 1769 specs) against `next start`, headless shell +
+  libXdamage workaround as before.
+- Screenshots: 1769 desktop (hero/4 events/closing), narrow 480px, reduced
+  motion, 1969 regression set, side-by-side sheet + journey recording —
+  attached to PR #10, not committed (see docs/evidence/README.md).
+
+### Known limitations / next
+- All 1769 imagery is placeholder slots awaiting externally generated
+  artwork (hero, steam plate, knowledge plate, trade map, labour scene,
+  closing panorama, transition plate). Swap by path + assetState flip.
+- Real-GPU motion review still outstanding (also for 1769 cloud warmth —
+  the 1769 descent warms toward rag-paper tones; verify feel on hardware).
+- `transition-plate-1769` slot is registered but not yet composed into a
+  bespoke 1769 descent moment (deferred; shared choreography carries the
+  yearly cues via colour only).
+- Copperplate stacks fall back to Baskerville/serif on systems without
+  Copperplate; acceptable, documented in the identity comment.
+
+### Cycle 5b addendum — final 1769 artwork integrated (2026-07-10)
+
+- All seven 1769 slots now carry FINAL externally generated artwork
+  (project-directed): hero workshop scene, sectioned steam plate,
+  encyclopaedia specimen sheet, world chart, spinning-workshop scene,
+  atmospheric closing sheet, and the transit-of-Venus measured diagram.
+  Web-optimised WebP (q82, sharp-yuv, 126–580 KB each) under
+  public/yol1769/; PNG masters stay OUTSIDE the repository.
+- Hero: the landscape master is used intentionally via focal-aware cover
+  crop (focal 74%/45%) — the hero art element and its parallax now honour
+  the manifest focal point (data-fx/fy), so desktop shows the apparatus
+  slice and narrow layouts show the full harbour scene. No layout rewrite.
+- Technical plates: `crop: 'contain'` is now honoured
+  (`.mf[data-crop='contain']`) so sectioned plates and annotations are
+  never crop-sacrificed.
+- Trade map: the map-sheet graticule overlay is PLACEHOLDER-ONLY now —
+  the final chart carries its own engraved graticule and the CSS overlay
+  competed with it.
+- Transition plate resolved: `transition-plate-1769` is composed as a
+  single-plate interlude between the labour plate and the closing
+  panorama (`.yp-interlude.single`) — a quiet measured moment whose
+  dotted transit line carries the Line motif inside the year. Dev slot
+  labels now render only for placeholder-state assets.
+- Placeholder slot SVGs are retained under public/yol1769/slots/ as
+  graceful fallbacks and dev references.
+- Verification: lint/tsc/49 unit tests clean; all 11 Playwright specs
+  pass against `next start` (yol-1769 spec updated for final-state
+  assets); build via the split compile/generate phases in-sandbox (the
+  single-pass build exceeds the 45s cap — GitHub CI runs it whole).
+
+### CI flake diagnosis (2026-07-10, PR #10 run 4 / main run 2)
+
+GitHub's 2-core runners running TWO parallel Playwright workers starve the
+rAF/GSAP loop: arrival-timing specs failed on plain main (run 2: reduced-
+motion lens opacity 0/0.28 at a fixed-sleep assert) and the 1969 core-loop
+return failed once the suite grew (run 4: the return click landed while
+the transition lock was still engaged and was intentionally swallowed).
+Not artwork-related. Fixes: `workers: 1` on CI (playwright.config.ts),
+poll the reveal instead of fixed-sleep asserts, and retry the return
+click like a real user (`expect(...).toPass`). The lock-swallowing
+behaviour itself is by design and stays.
+
+### Cycle 5b close-out — product vision clarification (2026-07-10)
+
+Sahil completed the real-GPU visual review of PR #10 (all checklist items
+confirmed; ChatGPT reviewed the diff and the green CI run) and approved
+the PR for merge. Recorded product decision: the stacked editorial YoL
+page is an ACCEPTED FUNCTIONAL PROTOTYPE of the Year Visual Identity
+architecture — the intended interaction model is a nested, scroll-driven
+local-timeline world, deliberately deferred to a separate tracked build.
+The deferred-builds list (none started) lives in GOAL.md. README and
+GOAL.md were corrected so neither implies 1969-only descent, a fully
+disconnected database, or that the stacked layout is final.

@@ -7,6 +7,7 @@ import { MAX_INDEX } from '@/src/data/anchors';
 import { useExperience, useTuning } from './store';
 import {
   descentState,
+  destinationStyle,
   metricsState,
   motionPref,
   timeState,
@@ -41,13 +42,19 @@ function SceneRoot() {
   }, [scene, colors]);
 
   const fpsRef = useRef({ frames: 0, last: 0 });
+  const skyRef = useRef('');
 
   useFrame((state, dt) => {
     const tuning = useTuning.getState();
     const exp = useExperience.getState();
     const cam = state.camera as THREE.PerspectiveCamera;
 
-    // background + fog blend between the two worlds
+    // background + fog blend between the two worlds; the YoL side is the
+    // destination year's sky (from its visual identity), not a fixed colour
+    if (skyRef.current !== destinationStyle.sky) {
+      skyRef.current = destinationStyle.sky;
+      colors.yol.set(destinationStyle.sky);
+    }
     colors.bg.copy(colors.line).lerp(colors.yol, descentState.blend);
     colors.fog.color.copy(colors.bg);
     colors.fog.density = tuning.fogDensity * (1 + descentState.blend * 0.9);
