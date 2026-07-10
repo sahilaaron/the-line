@@ -19,7 +19,14 @@ describe('export/import', () => {
     await seedPrototype(db);
     const payload = await exportDatabase(db);
     expect(payload.formatVersion).toBe(EXPORT_FORMAT_VERSION);
-    expect(payload.data.periods).toHaveLength(5);
+    // 5 anchor periods + per-event and context-year periods from the chronology seed
+    const slugs = payload.data.periods.map((x) => x.slug);
+    for (const anchor of ['bce-10000', '1450', '1769', '1969', '2026']) {
+      expect(slugs).toContain(anchor);
+    }
+    expect(slugs).toContain('evt-1969-apollo11');
+    expect(payload.data.yolTimelinePoints.length).toBeGreaterThan(0);
+    expect(payload.data.yolPointThemes.length).toBeGreaterThan(0);
   });
 
   it('export -> import into a fresh DB round-trips row counts', async () => {
@@ -109,8 +116,14 @@ describe('export/import', () => {
     const yol = await findYolByAnchorSlug(db, '1969');
     const closure = await exportYolClosure(db, yol!.id);
     expect(closure.data.yolCompositions).toHaveLength(1);
-    expect(closure.data.periods).toHaveLength(1);
-    expect(closure.data.periods[0].slug).toBe('1969');
+    // anchor period + the chronology's event/context periods, nothing else
+    const slugs = closure.data.periods.map((x) => x.slug);
+    expect(slugs).toContain('1969');
+    expect(slugs).toContain('evt-1969-apollo11');
+    expect(slugs).not.toContain('1769');
+    expect(slugs).not.toContain('evt-1769-watt-condenser');
+    expect(closure.data.yolTimelinePoints.every((tp) => tp.yolId === yol!.id)).toBe(true);
+    expect(closure.data.yolTimelinePoints.length).toBeGreaterThan(0);
   });
 
   it('rejects an unsupported formatVersion', async () => {
