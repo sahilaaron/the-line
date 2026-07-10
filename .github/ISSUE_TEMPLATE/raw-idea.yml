@@ -1,0 +1,44 @@
+name: Raw idea
+description: Capture an unshaped thought before it evaporates.
+labels: ["raw-idea"]
+title: "[Idea] "
+body:
+  - type: textarea
+    id: raw-thought
+    attributes:
+      label: Raw thought
+      description: The idea, exactly as it occurred. No polishing required.
+    validations:
+      required: true
+  - type: textarea
+    id: why-it-might-matter
+    attributes:
+      label: Why it might matter
+      description: Gut feeling is fine.
+  - type: dropdown
+    id: product-area
+    attributes:
+      label: Product area
+      options:
+        - Temporal Lens
+        - Line View
+        - Temporal Earth
+        - Descent
+        - YoL
+        - Database
+        - Research
+        - Media
+        - Thread View
+        - Entity View
+        - Infrastructure
+        - Project Management
+        - Unsure
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: What prompted this? Conversation, build, reference, frustration…
+  - type: textarea
+    id: links
+    attributes:
+      label: Optional links or screenshots
