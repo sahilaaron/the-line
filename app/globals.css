@@ -541,11 +541,20 @@ body {
   scroll-behavior: smooth;
 }
 
-.yol-ui:not(.hidden) .yol-page {
+.yol-ui:not(.hidden) .yol-page,
+.yol-ui:not(.hidden) .tw-root {
   pointer-events: auto;
 }
 
-.yol-ui.hidden .yol-page {
+/* the field surface stays hit-transparent; plates opt in per frame and
+   the note/line are decorative */
+.yol-ui:not(.hidden) .hf-root {
+  pointer-events: none;
+}
+
+.yol-ui.hidden .yol-page,
+.yol-ui.hidden .hf-root,
+.yol-ui.hidden .tw-root {
   pointer-events: none !important;
 }
 
@@ -2564,14 +2573,26 @@ body {
   position: absolute;
   inset: 0;
   will-change: transform;
+  pointer-events: none;
+}
+
+/* front layer paints last; each layer is a stacking context */
+.hf-layer[data-depth='0'] {
+  z-index: 30;
 }
 
 .hf-layer[data-depth='1'] {
+  z-index: 20;
   filter: saturate(0.85) brightness(0.9);
 }
 
 .hf-layer[data-depth='2'] {
+  z-index: 10;
   filter: saturate(0.65) brightness(0.78);
+}
+
+.hf-item .php-plate {
+  max-height: 30vh;
 }
 
 .hf-item {
@@ -2740,7 +2761,7 @@ body {
 .hf-current-year {
   position: absolute;
   left: 50vw;
-  top: 2.1rem;
+  top: -2.4rem;
   transform: translateX(-50%);
   font-family: var(--serif);
   font-size: 1.6rem;
@@ -2977,16 +2998,12 @@ body {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  bottom: 1rem;
+  top: 0.9rem;
   z-index: 60;
   display: flex;
   align-items: center;
   gap: 0.9rem;
   pointer-events: auto;
-}
-
-.tw-root ~ .wc-chrome {
-  bottom: 1.2rem;
 }
 
 .wc-back {

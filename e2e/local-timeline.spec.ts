@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import {
   activePoint,
+  enterField,
   enterYear,
   gotoLine,
   returnToLine,
@@ -23,7 +24,12 @@ import {
  */
 const LENS: Record<string, string> = { '1769': 'steam', '1969': 'coldwar' };
 
-for (const year of YOL_YEARS) {
+/** Since issue #16, 1769 descends into the Historical Field
+ *  (e2e/historical-chain.spec.ts); the database-backed YoL journey is
+ *  proven on 1969. Further YoL years extend this list. */
+const YOL_RENDERER_YEARS = YOL_YEARS.filter((y) => y !== '1769');
+
+for (const year of YOL_RENDERER_YEARS) {
   test(`${year}: database-backed local timeline — enter, move, lens, return`, async ({
     page,
   }) => {
@@ -83,21 +89,18 @@ for (const year of YOL_YEARS) {
   });
 }
 
-test('the two years render distinct database content', async ({ page }) => {
+test('the two prototype years enter DIFFERENT world renderers', async ({ page }) => {
   await gotoLine(page);
-  await enterYear(page, '1769', { source: 'database' });
-  const lenses1769 = await page
-    .locator('.yp-chips [data-testid^="lens-"]')
-    .evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
+  // 1769 → the continuous Historical Field (issue #16)
+  await enterField(page);
+  await expect(page.getByTestId('field-current-year')).toHaveText('1769');
   await returnToLine(page, '1769');
 
+  // 1969 → the database-backed YoL local timeline (issue #14), untouched
   await enterYear(page, '1969', { source: 'database' });
   const lenses1969 = await page
     .locator('.yp-chips [data-testid^="lens-"]')
     .evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
-
-  // each year installs its own theme lenses (steam/... vs spaceflight/...)
-  expect(lenses1769).toContain('lens-steam');
   expect(lenses1969).toContain('lens-coldwar');
-  expect(lenses1769).not.toEqual(lenses1969);
+  await expect(page.locator('.experience')).toHaveAttribute('data-world', 'yol');
 });

@@ -16,7 +16,7 @@ import {
   timeState,
 } from './runtime';
 import { applyWheel, stepIndex } from './time';
-import { PALETTE, QUALITY, TUNING_DEFAULTS } from './config';
+import { PALETTE, QUALITY, TUNING_DEFAULTS, type Tuning } from './config';
 import { cssVariables } from './tokens';
 import { LineScene } from './scenes/LineScene';
 import { DescentController } from './scenes/DescentController';
@@ -119,6 +119,25 @@ export default function Experience() {
       new URLSearchParams(window.location.search).get('debug') === '1',
     []
   );
+
+  // development tuning via URL (debug mode only): ?debug=1&tune.<key>=<n>
+  // lets a visual-iteration session or a journey capture pin exact tuning
+  // values without touching code (values land in the same useTuning store
+  // the ?debug=1 panel edits)
+  useEffect(() => {
+    if (!debug) return;
+    const params = new URLSearchParams(window.location.search);
+    const overrides: Record<string, number> = {};
+    params.forEach((value, key) => {
+      if (!key.startsWith('tune.')) return;
+      const name = key.slice(5) as keyof Tuning;
+      const n = Number(value);
+      if (Number.isFinite(n) && name in TUNING_DEFAULTS) overrides[name] = n;
+    });
+    if (Object.keys(overrides).length > 0) {
+      useTuning.getState().set(overrides as Partial<Tuning>);
+    }
+  }, [debug]);
 
   // keep motionPref fresh
   useEffect(() => {

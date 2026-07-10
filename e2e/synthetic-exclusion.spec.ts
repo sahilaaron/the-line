@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { enterYear, gotoLine, returnToLine, YOL_YEARS } from './helpers';
+import { enterField, enterYear, gotoLine, returnToLine } from './helpers';
 
 /**
  * Synthetic exclusion at the public boundary.
@@ -14,15 +14,24 @@ import { enterYear, gotoLine, returnToLine, YOL_YEARS } from './helpers';
  * src/db/queries/yol-read-model.test.ts; this spec guards the whole render
  * path end to end.
  */
-for (const year of YOL_YEARS) {
-  test(`${year}: no synthetic content ever renders`, async ({ page }) => {
-    await gotoLine(page);
-    const yol = await enterYear(page, year, { source: 'database' });
+test('1969 YoL: no synthetic content ever renders', async ({ page }) => {
+  await gotoLine(page);
+  const yol = await enterYear(page, '1969', { source: 'database' });
 
-    const text = await yol.innerText();
-    expect(text).not.toMatch(/SYNTHETIC/i);
-    expect(text).not.toMatch(/synth-/i);
+  const text = await yol.innerText();
+  expect(text).not.toMatch(/SYNTHETIC/i);
+  expect(text).not.toMatch(/synth-/i);
 
-    await returnToLine(page, year);
-  });
-}
+  await returnToLine(page, '1969');
+});
+
+test('1769 Historical Field: no synthetic content ever renders', async ({ page }) => {
+  await gotoLine(page);
+  await enterField(page);
+
+  const text = await page.getByTestId('historical-field').innerText();
+  expect(text).not.toMatch(/SYNTHETIC/i);
+  expect(text).not.toMatch(/synth-/i);
+
+  await returnToLine(page, '1769');
+});
