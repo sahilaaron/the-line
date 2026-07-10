@@ -3,12 +3,15 @@
 import { useEffect, useRef } from 'react';
 import { useThree } from '@react-three/fiber';
 import gsap from 'gsap';
-import { INDEX_1969 } from '@/src/data/anchors';
+import * as THREE from 'three';
+import { ANCHORS } from '@/src/data/anchors';
+import { getYearIdentity } from '@/src/data/identity';
 import { useExperience, useTuning } from '../store';
 import {
   descentState,
   motionPref,
   resetYolReveal,
+  setDestinationStyle,
   timeState,
   yolReveal,
 } from '../runtime';
@@ -50,12 +53,31 @@ export function DescentController() {
       arrivalRef.current = tl;
     };
 
+    /** Point the shared transition at the destination year: the sky the
+     *  camera hands over to and the light the clouds warm toward come from
+     *  the destination identity, not from any hard-coded year. */
+    const aimAtDestination = () => {
+      const origin = useExperience.getState().originIndex;
+      const anchor = ANCHORS[origin];
+      if (!anchor) return;
+      const { palette } = getYearIdentity(anchor.id);
+      const paper = new THREE.Color(palette.paper);
+      const plate = new THREE.Color(palette.plate);
+      setDestinationStyle({
+        sky: palette.sky,
+        // low cloud tone: plate warmed toward paper; high tone: near paper
+        cloudLo: `#${plate.clone().lerp(paper, 0.32).getHexString()}`,
+        cloudHi: `#${paper.clone().lerp(new THREE.Color('#ffffff'), 0.12).getHexString()}`,
+      });
+    };
+
     const startDescent = () => {
       const t = useTuning.getState();
       const { earthY, halfH } = vhLayout(t);
       tlRef.current?.kill();
       arrivalRef.current?.kill();
       resetYolReveal();
+      aimAtDestination();
 
       if (motionPref.reduced) {
         // Short atmospheric crossfade, no camera dive, no signal flicker.
@@ -140,9 +162,10 @@ export function DescentController() {
       arrivalRef.current?.kill();
 
       const finishOnLine = () => {
+        const origin = useExperience.getState().originIndex;
         useExperience.getState().commitLine();
-        timeState.pos = INDEX_1969;
-        timeState.target = INDEX_1969;
+        timeState.pos = origin;
+        timeState.target = origin;
         descentState.blend = 0;
         descentState.orbFly = 0;
         descentState.signals = 0;
@@ -180,7 +203,7 @@ export function DescentController() {
         duration: d * 0.32,
         ease: 'power1.in',
       }, d * 0.14);
-      // hidden swap: back to the Line world near the Earth, 1969 active
+      // hidden swap: back to the Line world near the Earth, origin year active
       tl.add(() => {
         finishOnLine();
         camera.position.set(0, earthY * 0.62, 2.2);

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+  <!-- placeholder slot: engraved scene — spinning frames, mill machinery, workers. no text -->
+  <rect width="800" height="600" fill="#c9b78d"/>
+  <defs>
+    <pattern id="lh" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(-38)">
+      <line x1="0" y1="0" x2="0" y2="6" stroke="#211b16" stroke-width="0.8"/>
+    </pattern>
+  </defs>
+  <rect width="800" height="600" fill="url(#lh)" opacity="0.2"/>
+  <rect x="70" y="150" width="300" height="330" fill="#34302b" opacity="0.55"/>
+  <rect x="100" y="180" width="60" height="90" fill="#d8c7a3" opacity="0.35"/>
+  <rect x="190" y="180" width="60" height="90" fill="#d8c7a3" opacity="0.35"/>
+  <rect x="280" y="180" width="60" height="90" fill="#d8c7a3" opacity="0.35"/>
+  <circle cx="560" cy="330" r="130" fill="none" stroke="#211b16" stroke-width="2.4" opacity="0.6"/>
+  <circle cx="560" cy="330" r="96" fill="none" stroke="#211b16" stroke-width="1" opacity="0.5"/>
+  <line x1="560" y1="200" x2="560" y2="460" stroke="#211b16" stroke-width="1.2" opacity="0.55"/>
+  <line x1="430" y1="330" x2="690" y2="330" stroke="#211b16" stroke-width="1.2" opacity="0.55"/>
+  <rect x="60" y="480" width="680" height="8" fill="#211b16" opacity="0.5"/>
+</svg>

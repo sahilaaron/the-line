@@ -2,6 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 
+import { useState } from 'react';
 import type {
   AssetRecord,
   TreatmentPreset,
@@ -45,6 +46,8 @@ export function MediaFrame({
   captioned = true,
   className,
 }: MediaFrameProps) {
+  /** missing files degrade to a labelled empty plate, never a broken img */
+  const [failed, setFailed] = useState(false);
   const t = treatment ?? asset.treatment ?? 'captioned';
   const focal = asset.focal
     ? `${Math.round(asset.focal.x * 100)}% ${Math.round(asset.focal.y * 100)}%`
@@ -55,15 +58,21 @@ export function MediaFrame({
     <figure
       className={`mf mf-${t}${className ? ` ${className}` : ''}`}
       data-source={asset.sourceType}
+      data-state={asset.assetState}
       data-motif={sub?.motif}
     >
-      <div className="mf-media">
-        <img
-          src={asset.path}
-          alt={asset.alt}
-          loading="lazy"
-          style={focal ? { objectPosition: focal } : undefined}
-        />
+      <div className={`mf-media${failed ? ' mf-missing' : ''}`}>
+        {failed ? (
+          <div className="mf-missing-plate" role="img" aria-label={asset.alt} />
+        ) : (
+          <img
+            src={asset.path}
+            alt={asset.alt}
+            loading="lazy"
+            style={focal ? { objectPosition: focal } : undefined}
+            onError={() => setFailed(true)}
+          />
+        )}
         <i className="mf-grain" aria-hidden />
         {t === 'halftone' && <i className="mf-dots" aria-hidden />}
         {sub?.motif === 'scanlines' && <i className="mf-scan" aria-hidden />}

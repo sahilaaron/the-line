@@ -647,7 +647,7 @@ body {
 }
 
 /* crop + registration marks: documentary print motif on the title block */
-.motif-cropmarks .yp-head::before {
+.motif-crop-marks .yp-head::before {
   content: '';
   position: absolute;
   inset: -1.1rem -1.3rem;
@@ -661,7 +661,7 @@ body {
   background-repeat: no-repeat;
 }
 
-.motif-cropmarks .yp-head::after {
+.motif-crop-marks .yp-head::after {
   content: '';
   position: absolute;
   top: -0.5rem;
@@ -681,7 +681,7 @@ body {
   position: relative;
   background-size: cover;
   background-position: center;
-  border-bottom-left-radius: 260px;
+  border-radius: var(--yr-hero-art-radius, 0);
   box-shadow: 0 26px 70px rgba(40, 30, 15, 0.28);
 }
 
@@ -690,7 +690,7 @@ body {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background-image: url('/yol1969/slots/texture-grain.svg');
+  background-image: var(--yr-texture, none);
   mix-blend-mode: multiply;
   opacity: var(--yr-grain, 0.1);
   pointer-events: none;
@@ -957,7 +957,7 @@ body {
 .mf-grain {
   position: absolute;
   inset: 0;
-  background-image: url('/yol1969/slots/texture-grain.svg');
+  background-image: var(--yr-texture, none);
   mix-blend-mode: multiply;
   opacity: var(--yr-grain, 0.1);
   pointer-events: none;
@@ -1226,12 +1226,14 @@ body {
   transform: none;
 }
 
-/* theme lens dimming: non-matching events recede (structural behaviour) */
+/* theme lens dimming: non-matching events recede (structural behaviour;
+   the .dim class is computed from the ACTIVE YEAR's lens keys) */
 
-.yol-page[data-lens='spaceflight'] .yp-event:not([data-themes~='spaceflight']),
-.yol-page[data-lens='computing'] .yp-event:not([data-themes~='computing']),
-.yol-page[data-lens='signal'] .yp-event:not([data-themes~='signal']),
-.yol-page[data-lens='coldwar'] .yp-event:not([data-themes~='coldwar']) {
+.yp-event {
+  transition: opacity 0.45s ease, filter 0.45s ease;
+}
+
+.yol-page .yp-event.dim {
   opacity: 0.28;
   filter: grayscale(0.75);
 }
@@ -1752,4 +1754,289 @@ body {
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--ink-dim);
+}
+
+/* ==========================================================================
+   1769 media treatments + motifs — engraved knowledge / mechanism /
+   measurement. Everything reads `--yr-*` identity variables; nothing here
+   is bound to the year itself, only to treatments and motifs a year's
+   identity may select.
+   ========================================================================== */
+
+/* --- engraved plate: copperplate impression mounted on rag paper --- */
+
+.mf-engraved-plate {
+  padding: 1.15rem;
+  background: color-mix(in srgb, #ffffff 20%, var(--yr-surface-alt, #cdbb94));
+  border: 1px solid var(--yr-hairline, rgba(33, 27, 22, 0.42));
+  box-shadow: 0 18px 40px rgba(25, 18, 10, 0.24);
+}
+
+.mf-engraved-plate .mf-media {
+  border-radius: 0;
+  border: 1px solid var(--yr-hairline, rgba(33, 27, 22, 0.42));
+  box-shadow: none;
+}
+
+/* plate mark: the pressed double rule of an intaglio plate */
+.mf-engraved-plate .mf-media::after {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  border: 1px solid color-mix(in srgb, var(--yr-ink, #211b16) 30%, transparent);
+  pointer-events: none;
+}
+
+.mf-engraved-plate .mf-media img {
+  filter: var(--yr-filter, none);
+}
+
+/* restrained ink-bleed shadow along the plate edges */
+.mf-engraved-plate .mf-media::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 22px rgba(25, 18, 10, 0.22);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* --- map sheet: cartographic archive with graticule --- */
+
+.mf-map-sheet {
+  padding: 1rem 1rem 0.8rem;
+  background: color-mix(in srgb, #ffffff 14%, var(--yr-surface-alt, #cdbb94));
+  border: 1px solid var(--yr-hairline, rgba(33, 27, 22, 0.42));
+  box-shadow: 0 18px 40px rgba(25, 18, 10, 0.22);
+}
+
+.mf-map-sheet .mf-media {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* graticule: measured grid over the sheet, in the year's signal colour */
+.mf-map-sheet .mf-media::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      color-mix(in srgb, var(--yr-signal, #65717a) 32%, transparent) 0 1px,
+      transparent 1px 56px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--yr-signal, #65717a) 32%, transparent) 0 1px,
+      transparent 1px 56px
+    );
+  mix-blend-mode: multiply;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.mf-map-sheet .mf-media img {
+  filter: var(--yr-filter, none) opacity(0.96);
+}
+
+/* --- missing media degrade to a labelled empty plate --- */
+
+.mf-media.mf-missing {
+  min-height: 220px;
+}
+
+.mf-missing-plate {
+  width: 100%;
+  min-height: 220px;
+  background:
+    repeating-linear-gradient(
+      45deg,
+      color-mix(in srgb, var(--yr-ink, #211b16) 10%, transparent) 0 1px,
+      transparent 1px 9px
+    ),
+    var(--yr-surface-alt, #cdbb94);
+}
+
+/* ---------- 1769 section motifs ---------- */
+
+/* gear section: measured arc of a wheel, ticked like a dial (dark plates) */
+.yp-event[data-motif='gear-section']::before {
+  content: '';
+  position: absolute;
+  width: 34vh;
+  aspect-ratio: 1;
+  right: -12vh;
+  top: -10vh;
+  border: 1px dashed color-mix(in srgb, var(--yr-plate-ink, #e2d5b8) 40%, transparent);
+  border-radius: 50%;
+  background: repeating-conic-gradient(
+    color-mix(in srgb, var(--yr-plate-ink, #e2d5b8) 30%, transparent) 0 0.6deg,
+    transparent 0.6deg 15deg
+  );
+  -webkit-mask-image: radial-gradient(circle, transparent 62%, #000 63%);
+  mask-image: radial-gradient(circle, transparent 62%, #000 63%);
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* hatching: engraver's diagonal strokes across labour plates */
+.yp-event.surface-plate[data-motif='hatching']::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    -38deg,
+    rgba(0, 0, 0, 0.32) 0 1px,
+    transparent 1px 7px
+  );
+  mix-blend-mode: multiply;
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* engraved rules: double hairline above knowledge sections */
+.yp-event[data-motif='engraved-rules']::before {
+  content: '';
+  position: absolute;
+  top: calc(var(--yr-gap, 15vh) * -0.5);
+  left: 12%;
+  right: 12%;
+  height: 5px;
+  border-top: 1px solid var(--yr-hairline, rgba(33, 27, 22, 0.42));
+  border-bottom: 1px solid var(--yr-hairline, rgba(33, 27, 22, 0.42));
+  pointer-events: none;
+}
+
+/* graticule motif on paper sections: faint measured grid behind the text */
+.yp-event[data-motif='graticule'] .yp-event-body {
+  position: relative;
+}
+
+.yp-event[data-motif='graticule'] .yp-event-body::after {
+  content: '';
+  position: absolute;
+  inset: -1.4rem;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      color-mix(in srgb, var(--yr-signal, #65717a) 16%, transparent) 0 1px,
+      transparent 1px 44px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--yr-signal, #65717a) 16%, transparent) 0 1px,
+      transparent 1px 44px
+    );
+  opacity: 0.5;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* folio marks: book-corner rules + folio dot on the hero title block */
+.motif-folio-marks .yp-head::before {
+  content: '';
+  position: absolute;
+  inset: -1.2rem -1.4rem;
+  pointer-events: none;
+  opacity: 0.75;
+  border-top: 1px solid var(--yr-hairline, rgba(33, 27, 22, 0.42));
+  border-bottom: 3px double var(--yr-hairline, rgba(33, 27, 22, 0.42));
+}
+
+.motif-folio-marks .yp-head::after {
+  content: '';
+  position: absolute;
+  top: -0.55rem;
+  right: -0.8rem;
+  width: 9px;
+  height: 9px;
+  transform: rotate(45deg);
+  border: 1px solid var(--yr-hairline, rgba(33, 27, 22, 0.42));
+  background: color-mix(in srgb, var(--yr-accent-alt, #a57a3a) 45%, transparent);
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+/* on 1769's dark plates, dates/annotations pick up the brass accent */
+.yp-event.surface-plate .yp-event-date {
+  color: color-mix(in srgb, var(--yr-sub-accent, var(--yr-accent-alt, #a57a3a)) 72%, var(--yr-plate-ink, #e2d5b8));
+}
+
+/* ==========================================================================
+   Narrow layouts — the journey must not break. Composition simplifies:
+   hero stacks, events single-column, interlude stacks, mini-timeline keeps
+   years but drops sublabels (except the active year).
+   ========================================================================== */
+
+@media (max-width: 900px) {
+  .yp-hero {
+    grid-template-columns: 1fr;
+    min-height: 100vh;
+  }
+
+  .yp-col {
+    padding: 13vh 7vw 5vh;
+  }
+
+  .yp-hero-art {
+    order: 2;
+    min-height: 34vh;
+    margin: 0 7vw 7vh;
+    border-radius: 0;
+  }
+
+  .yp-event,
+  .yp-event.flip {
+    grid-template-columns: 1fr;
+    gap: 1.7rem;
+  }
+
+  .yp-event.flip .mf {
+    order: 0;
+  }
+
+  .yp-event .mf-media img {
+    max-height: 46vh;
+  }
+
+  .yp-event[data-motif='gear-section']::before {
+    display: none;
+  }
+
+  .yp-interlude {
+    grid-template-columns: 1fr;
+  }
+
+  .yp-tl-year {
+    padding: 1.7rem 0.3rem 0.1rem;
+  }
+
+  .yp-tl-year:not(.active) .yp-tl-s {
+    display: none;
+  }
+
+  .yp-tl-year:not(.active) .yp-tl-y {
+    font-size: 0.85rem;
+  }
+}
+
+@media (max-width: 560px) {
+  .yp-quote {
+    padding: 2rem 1.2rem 1.8rem;
+  }
+
+  .yp-quote blockquote {
+    font-size: 1.2rem;
+  }
+
+  /* keep the strip readable and reachable: it may scroll sideways */
+  .yp-timeline {
+    overflow-x: auto;
+    justify-content: flex-start;
+  }
+
+  .yp-tl-year {
+    flex: 1 0 4.4rem;
+  }
 }

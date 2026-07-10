@@ -3,7 +3,7 @@
 import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { descentState } from '../runtime';
+import { descentState, destinationStyle } from '../runtime';
 import { useTuning } from '../store';
 
 /**
@@ -16,7 +16,9 @@ const CLOUD_FRAG = /* glsl */ `
   varying vec2 vUv;
   uniform float uTime;
   uniform float uOpacity;
-  uniform float uWarm; // 0 = cool orbital passage, 1 = warm archival light
+  uniform float uWarm; // 0 = cool orbital passage, 1 = destination light
+  uniform vec3 uWarmLo; // destination-year low cloud tone (identity plate)
+  uniform vec3 uWarmHi; // destination-year high cloud tone (identity paper)
 
   float hash(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
@@ -52,9 +54,7 @@ const CLOUD_FRAG = /* glsl */ `
     // warming toward archival cream as the material year approaches
     vec3 coolLo = vec3(0.55, 0.62, 0.72);
     vec3 coolHi = vec3(0.92, 0.94, 0.97);
-    vec3 warmLo = vec3(0.42, 0.37, 0.30);
-    vec3 warmHi = vec3(0.97, 0.92, 0.80);
-    vec3 col = mix(mix(coolLo, coolHi, clouds), mix(warmLo, warmHi, clouds), uWarm);
+    vec3 col = mix(mix(coolLo, coolHi, clouds), mix(uWarmLo, uWarmHi, clouds), uWarm);
     gl_FragColor = vec4(col, coverage * uOpacity);
   }
 `;
@@ -65,9 +65,18 @@ export function CloudLayer() {
   // NOTE: R3F v9 clones the `uniforms` prop on construction — animated
   // uniforms must be mutated through the material ref, never this object.
   const uniforms = useMemo(
-    () => ({ uTime: { value: 0 }, uOpacity: { value: 0 }, uWarm: { value: 0 } }),
+    () => ({
+      uTime: { value: 0 },
+      uOpacity: { value: 0 },
+      uWarm: { value: 0 },
+      uWarmLo: { value: new THREE.Color(destinationStyle.cloudLo) },
+      uWarmHi: { value: new THREE.Color(destinationStyle.cloudHi) },
+    }),
     []
   );
+  // cache so per-frame updates only re-parse colours when the destination
+  // year actually changes
+  const destRef = useRef({ lo: '', hi: '' });
 
   useFrame((state, dt) => {
     const mesh = meshRef.current;
@@ -82,6 +91,17 @@ export function CloudLayer() {
     // ease the warmth toward the current world so the tint never pops
     const warm = mat.uniforms.uWarm.value as number;
     mat.uniforms.uWarm.value = warm + (descentState.blend - warm) * Math.min(1, dt * 2.4);
+
+    // destination-year cloud light (set from the year identity on descent)
+    const dest = destRef.current;
+    if (dest.lo !== destinationStyle.cloudLo) {
+      dest.lo = destinationStyle.cloudLo;
+      (mat.uniforms.uWarmLo.value as THREE.Color).set(dest.lo);
+    }
+    if (dest.hi !== destinationStyle.cloudHi) {
+      dest.hi = destinationStyle.cloudHi;
+      (mat.uniforms.uWarmHi.value as THREE.Color).set(dest.hi);
+    }
 
     mesh.visible = mat.uniforms.uOpacity.value > 0.001;
     if (!mesh.visible) return;

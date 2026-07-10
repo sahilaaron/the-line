@@ -29,6 +29,28 @@ export const descentState = {
 };
 
 /**
+ * Destination-year atmosphere for the shared transition: the sky the camera
+ * hands over to and the light the clouds warm toward. Set from the
+ * destination year's visual identity when a descent starts, so the same
+ * descent choreography carries year-specific cues. Defaults match 1969.
+ */
+export const destinationStyle = {
+  sky: '#0d1522',
+  cloudLo: '#6b5e4d',
+  cloudHi: '#f7ebcc',
+};
+
+export function setDestinationStyle(s: {
+  sky: string;
+  cloudLo: string;
+  cloudHi: string;
+}): void {
+  destinationStyle.sky = s.sky;
+  destinationStyle.cloudLo = s.cloudLo;
+  destinationStyle.cloudHi = s.cloudHi;
+}
+
+/**
  * Staged arrival reveal of the YoL tableau, animated by GSAP after the swap.
  * 3D layers and DOM overlay both read these each frame.
  */
@@ -41,15 +63,33 @@ export const yolReveal = {
 };
 
 /**
- * Theme lens focus. DOM handlers write targets (0/1); a per-frame lerp in
- * YolScene moves `current` toward them; shaders read `current`.
+ * Theme lens focus. Keys are the ACTIVE YEAR's lens keys (normalised anchor
+ * theme ids), installed by the YoL page via setThemeLenses — never a fixed
+ * set. DOM handlers write targets (0/1); per-frame lerps move `current`
+ * toward them; readers use `current`.
  */
 export const themeFocus = {
-  target: { spaceflight: 0, computing: 0, signal: 0, coldwar: 0 },
-  current: { spaceflight: 0, computing: 0, signal: 0, coldwar: 0 },
+  target: {} as Record<string, number>,
+  current: {} as Record<string, number>,
 };
 
-export type ThemeFocusKey = keyof typeof themeFocus.target;
+export type ThemeFocusKey = string;
+
+/** Install the lens key set for the year being viewed (resets focus). */
+export function setThemeLenses(keys: string[]): void {
+  const target: Record<string, number> = {};
+  const current: Record<string, number> = {};
+  for (const k of keys) {
+    target[k] = 0;
+    current[k] = 0;
+  }
+  themeFocus.target = target;
+  themeFocus.current = current;
+}
+
+/** Default lens set (1969) so legacy scenes/tests have stable keys before
+ *  a YoL page installs the active year's lenses. */
+setThemeLenses(['spaceflight', 'computing', 'signal', 'coldwar']);
 
 /** prefers-reduced-motion, kept fresh by a matchMedia listener (Experience). */
 export const motionPref = { reduced: false };
@@ -71,10 +111,10 @@ export function resetYolReveal(): void {
 }
 
 export function resetThemeFocus(): void {
-  (Object.keys(themeFocus.target) as ThemeFocusKey[]).forEach((k) => {
+  for (const k of Object.keys(themeFocus.target)) {
     themeFocus.target[k] = 0;
     themeFocus.current[k] = 0;
-  });
+  }
 }
 
 /** Reset helper for tests. */
