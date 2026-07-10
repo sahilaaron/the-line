@@ -6,11 +6,28 @@
 - Nearest-anchor resolution correct at boundaries (e.g. 2.49 → index 2, 2.51 → index 3).
 - Snap converges to the nearest anchor and never overshoots the range.
 - Arrow-key stepping moves exactly one anchor and clamps at ends.
-- Store: `beginDescent` only fires from `mode:'line'` when unlocked; repeated calls while locked are no-ops; `beginReturn` restores `mode:'line'` with timePos at the 1969 anchor.
+- Store: `requestDescent` only fires from `mode:'line'` when unlocked and only for anchors with a year world (`hasYol`); repeated calls while locked are no-ops; `requestReturn` restores `mode:'line'` at the origin anchor.
 
-## Automated — Playwright (if environment allows)
+## Automated — Playwright
 
-Core loop: load → year label reads 2026 → wheel down until 1969 active → click Earth → YoL heading "1969" visible → click return → Line View again with 1969 active. Double-click Earth rapidly → still exactly one descent.
+> **Rebuilt in Cycle 6 (issue #14)** for the local-timeline world and the
+> database source. The suite (`e2e/*.spec.ts`) runs against a migrated +
+> seeded PGlite database (see `playwright.config.ts` / CI `PGLITE_DATA_DIR`).
+
+Parent Line (`parent-line.spec.ts`): 2026 caps travel; arrow keys step
+anchors; descent only where a year world exists (notice otherwise); rapid
+double-click cannot double-fire; `?debug=1` panel + metrics.
+
+Local timeline (`local-timeline.spec.ts`), for BOTH 1769 and 1969: enter from
+the parent Line → `[data-testid=yol-page][data-source=database]`; initial
+active point is the year's overview; move earlier (wheel down) and later
+(ArrowRight); focus a theme lens (non-matching stations get `.dim`, matching
+stay lit); return lands on the SAME year.
+
+Also: `fallback.spec.ts` (unavailable DB → `data-source=fallback`, loop still
+works, no leaked internals), `narrow.spec.ts` (480px prev/next), 
+`reduced-motion.spec.ts`, and `synthetic-exclusion.spec.ts` (no `SYNTHETIC`/
+`synth-` text ever renders).
 
 ## Manual browser checks
 

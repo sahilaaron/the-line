@@ -34,6 +34,11 @@ export const entityEventDetails = pgTable('entity_event_details', {
 export const entityThemeDetails = pgTable('entity_theme_details', {
   entityId: entityFk(),
   colorHex: text('color_hex'),
+  /** Stable renderer lens/identity key (e.g. 'spaceflight', 'steam',
+   * 'coldwar') — the explicit bridge from a theme entity to the visual
+   * layer's theme lens. Presentation KEY only; the visual treatment
+   * itself lives in src/data/identity. */
+  lensKey: text('lens_key'),
 });
 
 export const entityPlaceDetails = pgTable('entity_place_details', {

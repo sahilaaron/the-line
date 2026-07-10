@@ -7,6 +7,7 @@ import { MAX_INDEX } from '@/src/data/anchors';
 import { useExperience, useTuning } from './store';
 import {
   descentState,
+  localTimeState,
   destinationStyle,
   metricsState,
   motionPref,
@@ -106,6 +107,7 @@ function SceneRoot() {
 
 export default function Experience() {
   const mode = useExperience((s) => s.mode);
+  const locked = useExperience((s) => s.locked);
   const quality = useExperience((s) => s.quality);
   const debug = useMemo(
     () =>
@@ -129,26 +131,54 @@ export default function Experience() {
   useEffect(() => {
     const onWheel = (e: WheelEvent) => {
       const exp = useExperience.getState();
-      if (exp.locked || exp.mode !== 'line') return;
-      e.preventDefault();
-      const s = useTuning.getState().scrollSensitivity;
-      timeState.target = applyWheel(timeState.target, e.deltaY, s, MAX_INDEX);
-      timeState.lastInputMs = performance.now();
-      timeState.hasScrolled = true;
+      if (exp.locked) return;
+      if (exp.mode === 'line') {
+        e.preventDefault();
+        const s = useTuning.getState().scrollSensitivity;
+        timeState.target = applyWheel(timeState.target, e.deltaY, s, MAX_INDEX);
+        timeState.lastInputMs = performance.now();
+        timeState.hasScrolled = true;
+        return;
+      }
+      if (exp.mode === 'yol' && localTimeState.count > 0) {
+        // same temporal grammar as the parent Line: scroll down = earlier
+        e.preventDefault();
+        const s = useTuning.getState().localScrollSensitivity;
+        localTimeState.target = applyWheel(
+          localTimeState.target,
+          e.deltaY,
+          s,
+          localTimeState.count - 1
+        );
+        localTimeState.lastInputMs = performance.now();
+      }
     };
     const onKey = (e: KeyboardEvent) => {
       const exp = useExperience.getState();
-      if (exp.locked || exp.mode !== 'line') return;
+      if (exp.locked) return;
       if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-      e.preventDefault();
       const dir = e.key === 'ArrowLeft' ? -1 : 1;
-      timeState.target = stepIndex(
-        Math.round(timeState.target),
-        dir,
-        MAX_INDEX
-      );
-      timeState.lastInputMs = performance.now();
-      timeState.hasScrolled = true;
+      if (exp.mode === 'line') {
+        e.preventDefault();
+        timeState.target = stepIndex(
+          Math.round(timeState.target),
+          dir,
+          MAX_INDEX
+        );
+        timeState.lastInputMs = performance.now();
+        timeState.hasScrolled = true;
+        return;
+      }
+      if (exp.mode === 'yol' && localTimeState.count > 0) {
+        // left = earlier, right = later — one grammar at both depths
+        e.preventDefault();
+        localTimeState.target = stepIndex(
+          Math.round(localTimeState.target),
+          dir,
+          localTimeState.count - 1
+        );
+        localTimeState.lastInputMs = performance.now();
+      }
     };
     window.addEventListener('wheel', onWheel, { passive: false });
     window.addEventListener('keydown', onKey);
@@ -164,6 +194,7 @@ export default function Experience() {
     <div
       className={`experience mode-${mode}`}
       data-mode={mode}
+      data-locked={locked ? 'true' : 'false'}
       style={themeVars}
     >
       <Canvas

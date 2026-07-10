@@ -44,6 +44,13 @@ export const timePrecisionEnum = pgEnum('time_precision', [
   'unknown',
 ]);
 
+export const yolPointRoleEnum = pgEnum('yol_point_role', [
+  'overview',
+  'development',
+  'context',
+  'closing',
+]);
+
 export const entityKindEnum = pgEnum('entity_kind', [
   'person',
   'invention',

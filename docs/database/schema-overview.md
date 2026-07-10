@@ -1,7 +1,18 @@
-# Database Schema Overview (Cycle 3)
+# Database Schema Overview
 
-Drizzle ORM schema, PGlite (embedded Postgres-compatible), 22 tables across
+Drizzle ORM schema, PGlite (embedded Postgres-compatible), 24 tables across
 8 concerns. Source of truth: `src/db/schema/*.ts`. Migrations: `drizzle/*.sql`.
+
+- Cycle 3 established the base schema (22 tables).
+- Cycle 6 (issue #14, migration `drizzle/0001_*.sql`) added the Year-on-Line
+  local-timeline tables (`yol_timeline_points`, `yol_point_themes`),
+  sub-year integer date parts on `periods`, and the
+  `entity_theme_details.lens_key` / `yol_themes.display_label` presentation
+  bridges. The database is now the primary source for the rendered YoL
+  (`GET /api/yol/[anchorSlug]` via `src/db/queries/yol-read-model.ts`); the
+  `src/data/yol` TypeScript registry survives only as the isolated fallback.
+  The staged research pipeline that will populate these tables is described
+  in [`research-handoff.md`](./research-handoff.md).
 
 ## Conventions
 
@@ -18,18 +29,28 @@ Drizzle ORM schema, PGlite (embedded Postgres-compatible), 22 tables across
 
 ## Tables by concern
 
-- **Time** — `periods`
+- **Time** — `periods` (now with optional sub-year integer date parts —
+  `start_month`/`start_day`/`end_month`/`end_day`, CHECK-constrained to
+  1..12 / 1..31, BCE-safe, never JS `Date`).
 - **Entities** — `entities` (shared columns: slug, kind, label, summary,
   editorial/placeholder/synthetic flags, primaryPeriodId) + one subtype
   table per kind: `entity_person_details`, `entity_invention_details`,
   `entity_event_details`, `entity_theme_details`, `entity_place_details`,
   `entity_organisation_details`, `entity_civilisation_details`,
-  `entity_concept_details`, `entity_period_details`.
+  `entity_concept_details`, `entity_period_details`. `entity_theme_details`
+  carries a `lens_key` bridge to the renderer's normalised theme keys.
 - **Relationships** — `relationships`, `relationship_claims` (join to claims).
 - **Claims & sources** — `claims`, `sources`, `claim_sources` (join, with
   quotation/locator).
-- **Year on Line** — `yol_compositions`, `yol_themes`, `yol_scene_hints`,
-  `yol_featured_entities`.
+- **Year on Line** — `yol_compositions`, `yol_themes` (now with an optional
+  `display_label`), `yol_scene_hints`, `yol_featured_entities`, and the
+  Cycle-6 local-timeline pair: `yol_timeline_points` (one ordered point per
+  station — `role` ∈ overview/development/context/closing, `display_order`,
+  optional `entity_id`/`period_id`, `section_key`, copy overrides,
+  placeholder/synthetic/editorial flags) and `yol_point_themes` (join from a
+  point to the year's `yol_themes`, i.e. its lens tags). Both cascade-delete
+  with their composition; a point's `entity_id`/`period_id` are
+  delete-restricted.
 - **Media** — `media`, `media_associations` (polymorphic: entity/period/yol).
 
 ## Adding a new entity kind or relationship type
@@ -72,6 +93,11 @@ erDiagram
   SOURCES ||--o{ CLAIM_SOURCES : "sourceId"
 
   PERIODS ||--o{ YOL_COMPOSITIONS : "periodId"
+  YOL_COMPOSITIONS ||--o{ YOL_TIMELINE_POINTS : "yolId"
+  YOL_TIMELINE_POINTS ||--o{ YOL_POINT_THEMES : "pointId"
+  YOL_THEMES ||--o{ YOL_POINT_THEMES : "yolThemeId"
+  YOL_TIMELINE_POINTS }o--o| ENTITIES : "entityId"
+  YOL_TIMELINE_POINTS }o--o| PERIODS : "periodId"
   YOL_COMPOSITIONS ||--o{ YOL_THEMES : "yolId"
   ENTITIES ||--o{ YOL_THEMES : "themeEntityId"
   YOL_COMPOSITIONS ||--o{ YOL_SCENE_HINTS : "yolId"
@@ -88,10 +114,33 @@ erDiagram
     int start_year
     int end_year
     int display_year
+    int start_month
+    int start_day
+    int end_month
+    int end_day
     int confidence
     bool is_placeholder
     bool is_synthetic
     enum editorial_status
+  }
+  YOL_TIMELINE_POINTS {
+    text id PK
+    text yol_id FK
+    enum role
+    text entity_id FK
+    text period_id FK
+    int display_order
+    text section_key
+    text headline
+    text summary
+    bool is_placeholder
+    bool is_synthetic
+    enum editorial_status
+  }
+  YOL_POINT_THEMES {
+    text id PK
+    text point_id FK
+    text yol_theme_id FK
   }
   ENTITIES {
     text id PK

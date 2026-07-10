@@ -13,7 +13,7 @@
  * summarised by count — never enumerated here and never rendered in the canvas.
  */
 import { NextResponse } from 'next/server';
-import { and, asc, desc, eq, inArray, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, or, sql } from 'drizzle-orm';
 import { getDevDb } from '@/src/db/client/dev';
 import { resolveDevDataDir } from '@/src/db/client/dev';
 import {
@@ -106,19 +106,25 @@ export async function GET() {
       .groupBy(entities.kind)
       .orderBy(desc(sql`count(*)`));
 
-    // Curated (non-synthetic) periods = the anchors we weave onto the Line.
-    const curated = await db
+    // Curated anchors = periods carrying a non-synthetic composition with an
+    // anchorSlug. NOT "every non-synthetic period": since the issue-14
+    // chronology seed, per-event and context-year periods exist too and must
+    // not be woven onto the Line as anchors.
+    const yols = await db
       .select()
-      .from(periods)
-      .where(eq(periods.isSynthetic, false))
-      .orderBy(asc(periods.startYear));
-    const periodIds = curated.map((p) => p.id);
-
-    const yols = periodIds.length
-      ? await db.select().from(yolCompositions).where(inArray(yolCompositions.periodId, periodIds))
-      : [];
+      .from(yolCompositions)
+      .where(and(eq(yolCompositions.isSynthetic, false), isNotNull(yolCompositions.anchorSlug)));
     const yolByPeriod = new Map(yols.map((y) => [y.periodId, y]));
     const yolIds = yols.map((y) => y.id);
+
+    const periodIds = yols.map((y) => y.periodId);
+    const curated = periodIds.length
+      ? await db
+          .select()
+          .from(periods)
+          .where(and(eq(periods.isSynthetic, false), inArray(periods.id, periodIds)))
+          .orderBy(asc(periods.startYear))
+      : [];
 
     // Themes per YoL (join through the theme entity for its label).
     const themeRows = yolIds.length

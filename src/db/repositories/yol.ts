@@ -47,3 +47,53 @@ export async function listFeaturedEntities(db: Db, yolId: string) {
   const byId = new Map(entityRows.map((e) => [e.id, e]));
   return rows.map((r) => ({ ...r, entity: byId.get(r.entityId) })).filter((r) => r.entity);
 }
+
+/* ------------------------------------------------------------------ */
+/* Local chronology (yol_timeline_points)                             */
+/* ------------------------------------------------------------------ */
+
+import {
+  yolPointThemes,
+  type NewYolPointTheme,
+  type NewYolTimelinePoint,
+  type YolTimelinePoint,
+  yolTimelinePoints,
+} from '../schema';
+
+export async function createTimelinePoint(db: Db, input: NewYolTimelinePoint): Promise<YolTimelinePoint> {
+  const [row] = await db.insert(yolTimelinePoints).values(input).returning();
+  return row;
+}
+
+export async function addPointTheme(db: Db, input: NewYolPointTheme) {
+  const [row] = await db.insert(yolPointThemes).values(input).onConflictDoNothing().returning();
+  return row;
+}
+
+/** Ordered local chronology of a composition (displayOrder ascending —
+ *  the authoritative, curated total order). */
+export async function listTimelinePoints(db: Db, yolId: string): Promise<YolTimelinePoint[]> {
+  return db.query.yolTimelinePoints.findMany({
+    where: eq(yolTimelinePoints.yolId, yolId),
+    orderBy: [asc(yolTimelinePoints.displayOrder)],
+  });
+}
+
+export async function listPointThemes(db: Db, pointIds: string[]) {
+  if (pointIds.length === 0) return [];
+  return db.query.yolPointThemes.findMany({ where: inArray(yolPointThemes.pointId, pointIds) });
+}
+
+/** Existence check used by the idempotent seed: a point in this
+ *  composition for this entity (or this role, for subject-less points). */
+export async function findTimelinePointByEntity(db: Db, yolId: string, entityId: string) {
+  return db.query.yolTimelinePoints.findFirst({
+    where: (t, { and: andOp, eq: eqOp }) => andOp(eqOp(t.yolId, yolId), eqOp(t.entityId, entityId)),
+  });
+}
+
+export async function findTimelinePointByRole(db: Db, yolId: string, role: YolTimelinePoint['role']) {
+  return db.query.yolTimelinePoints.findFirst({
+    where: (t, { and: andOp, eq: eqOp }) => andOp(eqOp(t.yolId, yolId), eqOp(t.role, role)),
+  });
+}

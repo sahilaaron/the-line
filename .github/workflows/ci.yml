@@ -94,16 +94,28 @@ jobs:
       - name: Install Playwright Chromium (+ OS deps)
         run: npx playwright install --with-deps chromium
 
+      # The database-backed YoL needs a migrated + seeded PGlite directory.
+      # It lives in RUNNER_TEMP (outside the repo, never committed) and is
+      # forwarded to the Playwright web server via PGLITE_DATA_DIR. The e2e
+      # seed also loads a tiny synthetic set so the synthetic-exclusion spec
+      # has teeth without the slow full stress seed.
+      - name: Seed a throwaway PGlite database for e2e
+        run: npm run db:migrate && npm run db:seed:e2e
+        env:
+          PGLITE_DATA_DIR: ${{ runner.temp }}/pglite
+
       - name: Production build
         run: npm run build
 
       # The e2e suite runs against `next start` (playwright.config.ts
-      # webServer honours PW_SERVER_CMD) — same commands as local runs.
+      # webServer honours PW_SERVER_CMD) — same commands as local runs. The
+      # server reads the seeded chronology from the same PGLITE_DATA_DIR.
       - name: Run e2e suite
         run: npx playwright test --reporter=list,html
         env:
           PW_SERVER_CMD: npx next start -p 3011
           PLAYWRIGHT_HTML_OPEN: never
+          PGLITE_DATA_DIR: ${{ runner.temp }}/pglite
 
       # Failure evidence lives in short-retention CI artifacts, never in
       # Git (docs/evidence/README.md).

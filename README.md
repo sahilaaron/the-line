@@ -17,14 +17,16 @@ Open `http://localhost:3000/?debug=1` for the live tuning panel + metrics.
 
 The loop: scroll down to travel back in time → arrow keys step anchors →
 at **1969** or **1769**, click the Earth → descend through the clouds
-into that year's Year on Line page → "Return to the Line" (you land on
-the year you left).
+into that year's **local timeline world** → wheel/arrows travel the
+year's own chronology beneath a fixed local marker (down = earlier, the
+same grammar as the parent Line) → "Return to the Line" (you land on the
+year you left).
 
 Each year renders through the shared **Year Visual Identity** system
 (`src/data/identity/`): 1969 is space-age editorial, 1769 is engraved
-broadsheet. The current stacked editorial YoL layout is an accepted
-functional prototype — the intended nested local-timeline interaction is
-a separate future cycle (see `GOAL.md`, Deferred).
+broadsheet. The YoL is a nested local timeline: context years, the year
+overview, dated developments and a closing point, read from the database
+(see below) with the TypeScript registry as an isolated fallback.
 
 ## Checks
 
@@ -46,9 +48,13 @@ imagery is labelled as such in every caption; nothing is archival media.
 
 Local, PostgreSQL-compatible data layer under `src/db/` — Drizzle ORM +
 Drizzle Kit + PGlite (embedded; no server/Docker/credentials) + Zod.
-Wired into the UI **read-only** via the Seed Inspector / Line View data
-layer (`/api/line-data`); the YoL pages still render from placeholder
-content modules — the canonical DB → YoL read model is a future build.
+Wired into the UI **read-only** twice: the Seed Inspector / Line View
+data layer (`/api/line-data`) and the canonical **DB → YoL read model**
+(`GET /api/yol/[anchorSlug]`, `src/db/queries/yol-read-model.ts`), which
+feeds each year's local chronology (timeline points, themes with stable
+lens keys, claims/sources, provenance). With an empty or unavailable
+database the YoL falls back to the provisional registry in
+`src/data/yol/` — clearly isolated, never mixed.
 See `docs/database/` for schema, integrity rules, import/export and the
 query cookbook.
 

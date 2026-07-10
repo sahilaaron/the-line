@@ -20,6 +20,11 @@ export const periods = pgTable(
     /** Astronomical-year integers. Null when unknown/open-ended. */
     startYear: integer('start_year'),
     endYear: integer('end_year'),
+    /** Optional within-year date parts (1-based ints; never JS Date). */
+    startMonth: integer('start_month'),
+    startDay: integer('start_day'),
+    endMonth: integer('end_month'),
+    endDay: integer('end_day'),
     isStartUncertain: boolean('is_start_uncertain').notNull().default(false),
     isEndUncertain: boolean('is_end_uncertain').notNull().default(false),
     /** Representative single year for sorting/anchoring (e.g. midpoint). */
@@ -36,6 +41,14 @@ export const periods = pgTable(
     index('periods_end_year_idx').on(t.endYear),
     index('periods_display_year_idx').on(t.displayYear),
     check('periods_confidence_range', sql`${t.confidence} >= 0 AND ${t.confidence} <= 100`),
+    check(
+      'periods_month_range',
+      sql`(${t.startMonth} IS NULL OR (${t.startMonth} >= 1 AND ${t.startMonth} <= 12)) AND (${t.endMonth} IS NULL OR (${t.endMonth} >= 1 AND ${t.endMonth} <= 12))`,
+    ),
+    check(
+      'periods_day_range',
+      sql`(${t.startDay} IS NULL OR (${t.startDay} >= 1 AND ${t.startDay} <= 31)) AND (${t.endDay} IS NULL OR (${t.endDay} >= 1 AND ${t.endDay} <= 31))`,
+    ),
     check(
       'periods_valid_range',
       sql`${t.startYear} IS NULL OR ${t.endYear} IS NULL OR ${t.startYear} <= ${t.endYear}`,

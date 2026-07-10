@@ -16,11 +16,13 @@ src/
     Experience.tsx   persistent <Canvas> + DOM overlay composition
     scenes/
       LineScene.tsx  Line, Earth, theme orbs, upper field
-      YolScene.tsx   1969 scene content
+      YolScene.tsx   YoL 3D backdrop (year-agnostic)
       Descent.tsx    GSAP camera/fog transition, scene swap
     three/           reusable meshes/shaders (Earth, CloudLayer, Field…)
-    overlay/         DOM: lens, year label, anchor labels, YoL text, debug panel
-src/data/            typed placeholder content (see 02-data-model.md)
+    overlay/         DOM: lens, year label, anchor labels, YoL local-timeline
+                     page (YolPage.tsx), data accessor (useYolData.ts), debug panel
+src/data/            typed placeholder content; YoL registry is FALLBACK only
+                     (DB is primary — see 02-data-model.md, database/*)
 ```
 
 ## Rules
@@ -34,7 +36,9 @@ src/data/            typed placeholder content (see 02-data-model.md)
 
 ## State machine
 
-`mode: 'line' | 'descending' | 'yol' | 'ascending'`. Transitions only via store actions `beginDescent(anchorId)` / `beginReturn()`, which set the lock; GSAP `onComplete` commits `mode` and releases the lock. Interrupted transitions (rapid input) are ignored while locked.
+`mode: 'line' | 'descending' | 'yol' | 'ascending'`. Transitions only via store actions `requestDescent(index)` / `requestReturn()`, which set the lock; GSAP `onComplete` commits `mode` and releases the lock. Interrupted transitions (rapid input) are ignored while locked.
+
+> **Cycle 6:** `yol` mode is a NESTED LOCAL TIMELINE. Inside a year, wheel/←→ drive `localTimeState` (point-index units) with the same snap discipline as the parent Line — wheel down = earlier, → = later — while the parent `timeState` is frozen. Descent is offered only for anchors with a year world (`hasYol`, currently 1769 & 1969); elsewhere the Earth click raises a notice.
 
 ## Quality tiers
 

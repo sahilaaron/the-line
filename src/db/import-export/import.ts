@@ -80,6 +80,8 @@ export async function importFixture(db: Db, payload: ExportPayload, opts: Import
       await insertTable(tx, schema.yolThemes, 'yolThemes', d.yolThemes);
       await insertTable(tx, schema.yolSceneHints, 'yolSceneHints', d.yolSceneHints);
       await insertTable(tx, schema.yolFeaturedEntities, 'yolFeaturedEntities', d.yolFeaturedEntities);
+      await insertTable(tx, schema.yolTimelinePoints, 'yolTimelinePoints', d.yolTimelinePoints ?? []);
+      await insertTable(tx, schema.yolPointThemes, 'yolPointThemes', d.yolPointThemes ?? []);
       await insertTable(tx, schema.media, 'media', d.media);
       await insertTable(tx, schema.mediaAssociations, 'mediaAssociations', d.mediaAssociations);
 

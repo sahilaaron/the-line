@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   destinationStyle,
+  localTimeState,
+  setLocalTimeline,
   resetRuntime,
   resetThemeFocus,
   setDestinationStyle,
@@ -44,5 +46,24 @@ describe('destination style', () => {
     expect(destinationStyle.sky).toBe('#241e17');
     expect(destinationStyle.cloudLo).toBe('#5f5341');
     expect(destinationStyle.cloudHi).toBe('#e0d0b0');
+  });
+});
+
+describe('local timeline runtime', () => {
+  it('setLocalTimeline installs count and initial position', () => {
+    setLocalTimeline(14, 3);
+    expect(localTimeState.count).toBe(14);
+    expect(localTimeState.pos).toBe(3);
+    expect(localTimeState.target).toBe(3);
+    expect(localTimeState.lastInputMs).toBeLessThan(0);
+  });
+
+  it('resetRuntime clears the local timeline', () => {
+    setLocalTimeline(9, 4);
+    localTimeState.target = 7;
+    resetRuntime();
+    expect(localTimeState.count).toBe(0);
+    expect(localTimeState.pos).toBe(0);
+    expect(localTimeState.target).toBe(0);
   });
 });
