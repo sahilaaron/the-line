@@ -68,3 +68,28 @@ branches and arrives in `main` only through a pull request linked to its
 issue. **Only Sahil merges into `main` and moves issues from `Review` to
 `Done`.** Agents stop at `Review`. See `CLAUDE.md` for the full git rules
 and the session startup checklist.
+
+## Board views (manual setup required)
+
+GitHub's public API/CLI cannot create or modify Project views (verified:
+no view mutations in the GraphQL schema), so views are configured in the
+UI. Target setup — current tabs are "Stage View" (table) and "Agent View"
+(board, still grouped by built-in Status, which is why everything shows
+under Todo):
+
+1. **Build Board** — rename the board tab (▼ on the tab → Rename) to
+   `Build Board`; view options (▼) → *Column field* → **Stage**. Do not
+   delete the built-in Status field; it is simply unused.
+2. **Ready for Agents** — New view → Board; filter `stage:Ready`;
+   column field **Agent**.
+3. **Active Work** — New view → Board; filter
+   `stage:"In Progress",Review`; column field **Stage**.
+4. **Ideas and Shaping** — New view → Board; filter
+   `stage:Inbox,Shaping`; column field **Stage**.
+5. **Completed Cycles** — New view → Board; filter `stage:Done`;
+   column field **Build Milestone**.
+6. **Autonomous Jobs** — New view → Board; filter
+   `execution-mode:Autonomous stage:Ready,"In Progress"`; column field
+   **Agent**.
+
+Click *Save changes* on each view tab after configuring it.
