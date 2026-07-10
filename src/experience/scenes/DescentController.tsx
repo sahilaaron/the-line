@@ -16,6 +16,7 @@ import {
   yolReveal,
 } from '../runtime';
 import { vhLayout } from '../config';
+import { prefetchYol } from '../overlay/useYolData';
 import { arrivalSchedule } from '../arrival';
 
 /**
@@ -60,6 +61,9 @@ export function DescentController() {
       const origin = useExperience.getState().originIndex;
       const anchor = ANCHORS[origin];
       if (!anchor) return;
+      // start resolving the destination's database content now, so it is
+      // normally ready before the clouds clear (client accessor dedupes)
+      prefetchYol(anchor.id);
       const { palette } = getYearIdentity(anchor.id);
       const paper = new THREE.Color(palette.paper);
       const plate = new THREE.Color(palette.plate);
