@@ -1,0 +1,64 @@
+name: Build job
+description: A fully specified job with a ready-to-run build prompt.
+labels: ["prompt-ready"]
+title: "[Build] "
+body:
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+    validations:
+      required: true
+  - type: textarea
+    id: current-context
+    attributes:
+      label: Current context
+      description: State of the codebase / data relevant to this job.
+  - type: textarea
+    id: required-work
+    attributes:
+      label: Required work
+    validations:
+      required: true
+  - type: textarea
+    id: non-goals
+    attributes:
+      label: Non-goals
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance criteria
+    validations:
+      required: true
+  - type: textarea
+    id: tests-evidence
+    attributes:
+      label: Tests and evidence required
+      description: Lint/typecheck/tests/build/screenshots expected as proof.
+  - type: textarea
+    id: build-prompt
+    attributes:
+      label: Build prompt
+      description: The exact prompt to hand to the agent.
+      render: markdown
+    validations:
+      required: true
+  - type: dropdown
+    id: recommended-agent
+    attributes:
+      label: Recommended agent
+      options:
+        - Fable
+        - Opus
+        - Sonnet
+        - ChatGPT
+        - Human
+        - Unassigned
+  - type: dropdown
+    id: execution-mode
+    attributes:
+      label: Execution mode
+      options:
+        - Interactive
+        - Autonomous
+        - Either
