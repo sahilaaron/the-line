@@ -44,7 +44,32 @@ describe('YoL queries', () => {
     const { db, pg } = await freshMigratedDb();
     cleanup = () => pg.close();
     await seedPrototype(db);
-    // 1975 has no exact period/composition; nearest curated anchor is 1969.
+    // 1975 has no exact period/composition; nearest ANCHOR composition is
+    // 1969. Regression guard: the chronology seed also creates slugged
+    // context-year periods (e.g. year-1973) that are CLOSER to 1975 but
+    // carry no composition — they must never win or null the fallback.
+    const yol = await nearestAvailableYolComposition(db, 1975);
+    expect(yol?.anchorSlug).toBe('1969');
+  });
+
+  it('nearestAvailableYolComposition ignores synthetic compositions', async () => {
+    const { db, pg } = await freshMigratedDb();
+    cleanup = () => pg.close();
+    await seedPrototype(db);
+    const { periods, yolCompositions } = await import('../schema');
+    const [p] = await db
+      .insert(periods)
+      .values({ slug: 'synth-1974', label: 'SYNTH', precision: 'exact', startYear: 1974, endYear: 1974, displayYear: 1974, isSynthetic: true })
+      .returning();
+    await db.insert(yolCompositions).values({
+      periodId: p.id,
+      anchorSlug: 'synth-1974',
+      title: 'SYNTH',
+      thesis: 'SYNTH',
+      atmospherePreset: 'orbital',
+      isSynthetic: true,
+    });
+    // 1974 is nearer to 1975 than 1969, but it is synthetic — skip it.
     const yol = await nearestAvailableYolComposition(db, 1975);
     expect(yol?.anchorSlug).toBe('1969');
   });

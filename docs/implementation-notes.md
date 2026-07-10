@@ -782,3 +782,22 @@ disconnected database, or that the stacked layout is final.
   locally. This is the exact job the newly-wired CI `e2e` step runs on every
   PR (seeded `${RUNNER_TEMP}/pglite`, `next start`), which is where the
   authoritative e2e pass + failure artifacts will come from.
+
+### Cycle 6 addendum — CI failure fix (2026-07-11, run 29116912003)
+
+- `db:test` failed deterministically on CI (both bounded-retry runs):
+  `nearestAvailableYolComposition(db, 1975)` returned undefined. Root
+  cause: the chronology seed slugs its event/context periods
+  (`evt-*`, `ctx-*`, `year-*`), so `findNearestCuratedAnchor` ("nearest
+  slugged period") started returning composition-less periods like
+  `year-1973`. "Slugged period" no longer means "parent-Line anchor".
+- Fix: `nearestAvailableYolComposition` now searches non-synthetic
+  compositions WITH an `anchorSlug` directly (nearest by period
+  display/start year) — plus a regression test and a synthetic-skip test.
+- Same latent bug fixed in `/api/line-data`: "curated anchors" are now
+  the periods referenced by an anchorSlug composition, not every
+  non-synthetic period (the inspector would have listed ~26 "anchors").
+  Verified live against a seeded dir: exactly 5 anchors, YoL read model
+  unaffected.
+- `findNearestCuratedAnchor` itself is kept (its repo test documents its
+  slug semantics) but is no longer used to locate anchors.
