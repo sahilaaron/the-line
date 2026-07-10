@@ -1,0 +1,61 @@
+name: Shaped feature
+description: A feature that has been shaped and is ready to schedule.
+labels: ["feature"]
+title: "[Feature] "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+    validations:
+      required: true
+  - type: textarea
+    id: product-outcome
+    attributes:
+      label: Product outcome
+      description: What the user can do or feel afterwards.
+    validations:
+      required: true
+  - type: textarea
+    id: proposed-behaviour
+    attributes:
+      label: Proposed behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: why-the-line
+    attributes:
+      label: Why this belongs in The Line
+  - type: textarea
+    id: non-goals
+    attributes:
+      label: Non-goals
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance criteria
+    validations:
+      required: true
+  - type: dropdown
+    id: recommended-agent
+    attributes:
+      label: Recommended agent
+      options:
+        - Fable
+        - Opus
+        - Sonnet
+        - ChatGPT
+        - Human
+        - Unassigned
+  - type: dropdown
+    id: recommended-execution-mode
+    attributes:
+      label: Recommended execution mode
+      options:
+        - Interactive
+        - Autonomous
+        - Either
