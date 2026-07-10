@@ -622,3 +622,95 @@ local-timeline world, deliberately deferred to a separate tracked build.
 The deferred-builds list (none started) lives in GOAL.md. README and
 GOAL.md were corrected so neither implies 1969-only descent, a fully
 disconnected database, or that the stacked layout is final.
+
+## Cycle 6 — Database-backed YoL local timeline world (issue #14, 2026-07-10, IN PROGRESS)
+
+### Architecture decisions
+- **Schema (migration `drizzle/0001_aspiring_darkhawk.sql`)**: local
+  chronology is curation-only rows in `yol_timeline_points` (role enum
+  `overview|development|context|closing`, FK to entity + period, unique
+  `(yol_id, display_order)`, optional headline/summary overrides,
+  `section_key` as the ONLY presentation bridge) + `yol_point_themes`
+  referencing `yol_themes` rows. Within-year time = nullable integer
+  `start_month/start_day/end_month/end_day` on `periods` (CHECKed 1–12 /
+  1–31) — JS `Date` is never used; display strings are built by the pure
+  BCE-safe formatter in `src/domain/yol-read-model.ts`. Stable renderer
+  bridges: `entity_theme_details.lens_key`, `yol_themes.display_label`.
+- **Read model**: `src/db/queries/yol-read-model.ts` →
+  `GET /api/yol/[anchorSlug]` (`app/api/yol/[anchorSlug]/route.ts`,
+  typed envelope `ok|not_found|empty|error`; no paths/SQL/stacks ever
+  leave the route). `isSynthetic = false` is filtered on EVERY query in
+  the path — the synthetic-exclusion boundary is this one file.
+- **Client**: `overlay/useYolData.ts` module cache by slug, in-flight
+  dedupe, one bounded retry, `prefetchYol()` fired from
+  `DescentController.aimAtDestination` so content resolves inside the
+  cloud passage. `overlay/yol-view-model.ts` maps BOTH sources
+  (database primary, `src/data/yol` registry fallback) into one
+  `YolViewModel`; `YolPage` cannot tell them apart (`data-source` attr
+  is exposed for tests/debug only).
+- **Interaction**: `localTimeState` in runtime.ts mirrors `timeState`
+  (pos/target/lastInput/count); wheel + arrow handlers live in
+  Experience.tsx beside the parent-Line handlers with the same grammar
+  (down/left = earlier). Snapping reuses `approach()` + round-after-idle.
+  Tunables (`localScrollSensitivity/localSnapStrength/localSnapDelayMs/
+  localTickSpacingVw/localFieldTravelVw`) in config.ts + DebugPanel.
+  Stations and ticks are absolutely positioned; the rAF writes
+  transforms/opacity per frame (no React state per frame); only the
+  discrete nearest-index crosses into state for aria/testids.
+- Seed rewritten (`src/db/seed/prototype.ts` + `yol-chronology.ts`):
+  contexts → overview (order 0) → developments (curated chronological
+  order, 10/20/…) → contexts after (10000+distance) → closing (100000).
+  Idempotent per point AND upgrade-safe: back-fills lens keys, display
+  labels and missing chronology on databases seeded by older versions.
+  No claims/sources are seeded — nothing is researched yet.
+
+### Critical findings
+- **Inline `pointer-events` re-enabled inside a `pointer-events: none`
+  parent**: the station rAF set `pointerEvents='auto'` on the active
+  station, which made the hidden YoL layer swallow Earth clicks in Line
+  View (descent gate appeared broken; no notice, no raycast). Inline
+  child styles OVERRIDE the parent's `.yol-ui.hidden` pointer-events
+  none. Fixed by gating on `mode === 'yol'` inside the rAF.
+- Orbiting theme-orb DOM labels can momentarily cover the Earth's click
+  point; automation must retry the click (the existing core-loop spec's
+  double-click already does — keep that pattern in new specs).
+- The old capture trick of waiting for `yol-title` visibility is
+  unreliable: `.yol-ui.hidden` hides via opacity, so Playwright still
+  counts it visible. Wait on `.experience[data-mode="yol"]` instead.
+- Plate-surface CSS: the `.yp-event.surface-plate` block uses full-bleed
+  negative margins tied to the old scroll layout; stations needed their
+  own `.yw-station.surface-plate` (plain dark plate card). The first
+  `surface-plate` selector in globals.css is the ADJACENT-SIBLING merge
+  rule — extending selectors by string match must target the base rule.
+
+### Verified (sandbox, software rendering)
+- lint (eslint app/src/db/src/experience/src/domain/src/data) clean;
+  tsc clean; production build exit 0 (45s-cap retry pattern).
+- Unit + db suites all green in cap-sized batches: 59 experience/data
+  (incl. new view-model, accessor, runtime suites) + seed 6 + read-model
+  8 + queries/validation/import-export + repositories 12 + schema 3.
+- Real-browser (chrome-headless-shell + libXdamage workaround, `next
+  start` + seeded `/tmp/pgdata`): 1969 AND 1769 enter their local
+  timeline world with `data-source="database"`, wheel moves earlier,
+  arrows move later, ticks/marker/pulse render, identities stay
+  distinct. Screenshots in session outputs (not committed — evidence
+  policy).
+
+### Known defects / not yet done (hand-off to the next agent)
+- e2e suite still asserts the STACKED page (scroll reveals, lens dimming
+  by section, "wheel ignored in YoL") — must be rewritten for the local
+  timeline + DB-backed path; CI needs the temporary migrated+seeded
+  PGlite dir step. `yolLineVh` tuning no longer drives the DOM local
+  Line (CSS hard-codes 91.7vh) — either wire it or note it.
+- Dead CSS from the stacked layout (`.yp-hero*`, `.yp-events`,
+  `.yp-timeline/.yp-tl-*`, `.yp-quote`, `.yp-interlude`, `.yp-slot`,
+  `.yp-scrollhint`, `.reveal`) remains in globals.css — safe but noisy;
+  remove once e2e is green.
+- 1969 quote + interlude/transition-plate assets are not yet composed
+  into the station world (quote could become a station treatment; the
+  1769 transition plate is reachable via section assets only).
+- Field/tick spacing, fades and travel need a real-GPU tuning pass
+  (`?debug=1` sliders exist). Narrow layout + reduced motion implemented
+  but only smoke-checked; e2e must cover them.
+- `docs/database/schema-overview.md`, query cookbook, and stale Cycle 1
+  statements in docs/02/03/04 not yet updated for the new tables.

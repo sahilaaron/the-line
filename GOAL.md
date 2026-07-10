@@ -1,51 +1,46 @@
-# GOAL — Build Cycle 5b: Multi-year Year Visual Identity proof (complete)
+# GOAL — Build Cycle 6: Database-backed YoL local timeline world (ACTIVE)
 
-(Cycle 3 = database foundation; Cycle 4 = Seed Inspector; Cycle 5 = the
-1969 Year Visual Identity — see `docs/implementation-notes.md`. This
-document records the COMPLETED outcome of cycle 5b, delivered by PR #10 /
-issue #2. It is not the specification for the next build.)
+(Cycle 5b — the multi-year Year Visual Identity proof — is complete and
+merged via PR #10; its outcome is recorded in
+`docs/implementation-notes.md`. This document describes the ACTIVE cycle,
+tracked as issue #14 on branch `issue-14/database-backed-yol-timeline`.)
 
-## Outcome
+## Mission
 
-The Year Visual Identity system is proven reusable across materially
-different years. 1969 (space-age editorial) and 1769 (engraved broadsheet
-— mechanism, measurement, engraved knowledge) both render through one
-year-driven architecture: content and identity resolve from the active
-anchor, no year is special-cased in any shared component, and the full
-journey (Line → descent → YoL → thematic lenses → return to the same
-Line position) works for both years.
+Rebuild the Year on Line as the intended NESTED, SCROLL-DRIVEN LOCAL
+TIMELINE WORLD, and connect it to the existing PGlite/Drizzle database
+through a clean server-side read model — leaving a clear, tested database
+destination for the historical research staging pipeline (#5) that follows.
 
-Shipped by PR #10:
+## Outcome shape
 
-- year-driven `YolPage` + YoL content registry (`src/data/yol/`);
-- `IDENTITY_1769` + final generated artwork in all seven 1769 manifest
-  slots (web-optimised, masters outside the repo; provenance honest);
-- asset manifest hardening (`assetState`, aspect ratios, focal crops,
-  graceful missing-media fallback);
-- registry-driven descent gate + origin-index return;
-- destination-aware transition atmosphere (cloud warmth, YoL sky);
-- dynamic theme lenses + generic dimming; narrow-layout and
-  reduced-motion coverage;
-- GitHub Actions CI (issue #11 / PR #12, merged) with hardened e2e
-  timing; review-evidence policy (media in PR attachments/CI artifacts,
-  never Git history);
-- verified: lint, typecheck, 49 unit tests, 11 Playwright specs, CI
-  green, and Sahil's real-GPU visual review.
+- Entering a year feels like descending into a smaller timeline contained
+  inside the parent Line: local Line near 91.7vh, a fixed local temporal
+  marker, the chronology moving beneath it, and the field above changing
+  with the active point. Wheel down = earlier; ←/→ step points; the
+  direction grammar matches the parent Line.
+- Both 1769 and 1969 render their local chronology from the database via
+  `GET /api/yol/[anchorSlug]` (`src/db/queries/yol-read-model.ts`); the
+  TypeScript registry (`src/data/yol/`) survives only as the isolated
+  fallback for empty/unavailable databases.
+- Schema extension (migration `drizzle/0001_*`): `yol_timeline_points` +
+  `yol_point_themes`, sub-year integer date parts on `periods` (BCE-safe,
+  no JS `Date`), `entity_theme_details.lens_key` and
+  `yol_themes.display_label` bridges. Historical truth, YoL curation and
+  visual identity remain separate concerns.
+- Idempotent seed loads the current provisional 1769/1969 content as
+  draft/placeholder chronology (no invented sources); synthetic records
+  are excluded at the query boundary; DB failures never leak internals.
 
-## Product status
+## Status (hand-off state — see issue #14 for the full criteria)
 
-The stacked editorial YoL page is an ACCEPTED FUNCTIONAL PROTOTYPE — a
-proof of the identity architecture, not the intended final interaction
-model. The intended Year on Line is a nested, scroll-driven timeline
-world; that redesign is deliberately a separate future cycle and reuses
-this cycle's infrastructure (identities, manifests, routing, return).
+Done: schema + migration, repositories/validation/import-export/audit
+coverage, chronology seed + tests, read model + API route + client
+accessor (cache/dedupe/retry/prefetch) + unified view model + tests, the
+YolPage local-timeline rebuild with tunables in `?debug=1`, unit + db
+suites green, production build green, both years verified DB-backed in a
+real browser.
 
-## Deferred — separate future builds (none started)
-
-- YoL local-timeline interaction redesign;
-- canonical DB → YoL read model;
-- 1769 database round-trip;
-- historical research staging pipeline;
-- read-only data studio;
-- sourced replacement of provisional historical content;
-- 1969 media refresh (issue #13, Shaping).
+Remaining: e2e suite rewrite (the old specs assume the stacked page and
+wheel-ignored-in-YoL), CI seeded-database e2e path, remaining doc
+corrections, evidence capture, PR. Tracked in issue #14.

@@ -171,7 +171,10 @@ export function YolPage() {
           const scale = motionPref.reduced ? 1 : 1 - Math.min(0.06, d * 0.045);
           el.style.transform = `translate(-50%, 0) translateX(${travel.toFixed(2)}vw) scale(${scale.toFixed(3)})`;
           el.style.opacity = String(Math.max(0, 1 - d * (motionPref.reduced ? 1 : 1.15)));
-          el.style.pointerEvents = d < 0.5 ? 'auto' : 'none';
+          // only interactive while the YoL world is actually front-of-house;
+          // never steal clicks from the Line View canvas beneath
+          el.style.pointerEvents =
+            d < 0.5 && useExperience.getState().mode === 'yol' ? 'auto' : 'none';
         }
       }
 
@@ -371,13 +374,16 @@ export function YolPage() {
                 {p.role === 'context' && (
                   <div className="yp-event-date">{p.yearLabel}</div>
                 )}
-                <h3 className={p.role === 'overview' ? 'yw-overview-title' : 'yp-event-title'}>
-                  {p.headline}
-                </h3>
+                {p.role !== 'overview' && (
+                  <h3 className="yp-event-title">{p.headline}</h3>
+                )}
                 {p.summary && (
                   <p className={p.role === 'overview' ? 'yp-thesis yw-overview-thesis' : 'yp-event-text'}>
                     {p.summary}
                   </p>
+                )}
+                {p.role === 'overview' && vm.supportingLine && (
+                  <p className="yw-context-note">{vm.supportingLine}</p>
                 )}
                 {p.role === 'context' && (
                   <p className="yw-context-note">
