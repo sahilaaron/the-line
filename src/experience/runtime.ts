@@ -16,6 +16,28 @@ export const timeState = {
   hasScrolled: false,
 };
 
+/**
+ * Continuous position along the YoL LOCAL timeline, in point-index units.
+ * Mirrors timeState: DOM handlers write target, the YolPage rAF eases pos
+ * toward it with the same snap discipline as the parent Line.
+ */
+export const localTimeState = {
+  pos: 0,
+  target: 0,
+  /** performance.now() of the last local scroll/key input */
+  lastInputMs: -1e9,
+  /** number of points on the active local timeline (0 = uninitialised) */
+  count: 0,
+};
+
+/** Install a year's local timeline (called when a YoL view model mounts). */
+export function setLocalTimeline(count: number, initialIndex: number): void {
+  localTimeState.count = count;
+  localTimeState.pos = initialIndex;
+  localTimeState.target = initialIndex;
+  localTimeState.lastInputMs = -1e9;
+}
+
 /** Descent/return transition state, animated by GSAP in DescentController. */
 export const descentState = {
   /** 0 = Line View world, 1 = YoL world (scene swap happens at 0.5) */
@@ -119,6 +141,10 @@ export function resetThemeFocus(): void {
 
 /** Reset helper for tests. */
 export function resetRuntime(): void {
+  localTimeState.pos = 0;
+  localTimeState.target = 0;
+  localTimeState.lastInputMs = -1e9;
+  localTimeState.count = 0;
   timeState.pos = INDEX_2026;
   timeState.target = INDEX_2026;
   timeState.lastInputMs = -1e9;

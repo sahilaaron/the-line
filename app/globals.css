@@ -760,7 +760,8 @@ body {
 }
 
 /* consecutive plates read as one broadcast block */
-.yp-event.surface-plate + .yp-event.surface-plate {
+.yp-event.surface-plate + .yp-event.surface-plate,
+.yw-station.surface-plate {
   margin-top: calc(var(--yr-gap, 12vh) * -1);
   border-top: 1px solid color-mix(in srgb, var(--yr-plate-ink, #e8e0cc) 12%, transparent);
 }
@@ -849,26 +850,32 @@ body {
   color: var(--yr-plate-ink, #e8e0cc);
 }
 
-.yp-event.surface-plate .yp-event-title {
+.yp-event.surface-plate .yp-event-title,
+.yw-station.surface-plate .yp-event-title,
+.yw-station.surface-plate .yw-overview-title {
   color: var(--yr-plate-ink, #e8e0cc);
 }
 
-.yp-event.surface-plate .yp-event-text {
+.yp-event.surface-plate .yp-event-text,
+.yw-station.surface-plate .yp-event-text {
   color: color-mix(in srgb, var(--yr-plate-ink, #e8e0cc) 82%, var(--yr-plate, #161310));
 }
 
-.yp-event.surface-plate .yp-event-tags span {
+.yp-event.surface-plate .yp-event-tags span,
+.yw-station.surface-plate .yp-event-tags span {
   background: color-mix(in srgb, var(--chip, #d8dee8) 16%, var(--yr-plate, #161310));
   border-color: color-mix(in srgb, var(--chip, #d8dee8) 45%, transparent);
   color: var(--yr-plate-ink, #e8e0cc);
 }
 
-.yp-event.surface-plate .mf-caption {
+.yp-event.surface-plate .mf-caption,
+.yw-station.surface-plate .mf-caption {
   color: var(--yr-plate-muted, #938b76);
 }
 
 /* scanline motif across broadcast plates */
-.yp-event.surface-plate[data-motif='scanlines']::after {
+.yp-event.surface-plate[data-motif='scanlines']::after,
+.yw-station.surface-plate[data-motif='scanlines']::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -883,7 +890,8 @@ body {
 }
 
 /* punch-card motif along the edge of computing plates */
-.yp-event.surface-plate[data-motif='punch-card']::before {
+.yp-event.surface-plate[data-motif='punch-card']::before,
+.yw-station.surface-plate[data-motif='punch-card']::before {
   content: '';
   position: absolute;
   top: 8%;
@@ -901,12 +909,14 @@ body {
 }
 
 /* documentary sections: monochrome newspaper voice */
-.yp-event[data-section='coldwar'] .yp-event-date {
+.yp-event[data-section='coldwar'] .yp-event-date,
+.yw-station[data-section='coldwar'] .yp-event-date {
   color: var(--yr-warning, #8f2116);
 }
 
 /* counterculture: saturated organic accent, ONLY here */
-.yp-event[data-section='counterculture'] .yp-event-body::before {
+.yp-event[data-section='counterculture'] .yp-event-body::before,
+.yw-station[data-section='counterculture'] .yw-station-body::before {
   background: linear-gradient(
     90deg,
     var(--yr-sub-accent, #c85a8e),
@@ -2066,4 +2076,416 @@ body {
 
 .yp-interlude.single .mf-caption {
   justify-content: center;
+}
+
+/* ==========================================================================
+   YoL LOCAL TIMELINE WORLD — the nested chronology inside a year.
+   The local Line (bottom strip, fixed marker, gold-at-active, pulse) is the
+   SAME structural object as the parent Line one depth deeper; the field
+   above it carries the year's material through the identity's --yr-* vars.
+   ========================================================================== */
+
+.yol-world {
+  overflow: hidden;
+  touch-action: none;
+}
+
+/* the sky you just fell through, still overhead when you arrive */
+.yol-world::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 22vh;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--yr-sky, #0d1522) 82%, transparent),
+    color-mix(in srgb, var(--yr-sky, #0d1522) 26%, transparent) 45%,
+    transparent
+  );
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* masthead — the year in its period voice, quiet top-left */
+.yw-mast {
+  position: absolute;
+  top: 6vh;
+  left: 5vw;
+  z-index: 4;
+  max-width: 26rem;
+  opacity: 0;
+  will-change: opacity, transform;
+  pointer-events: none;
+}
+
+.yw-title {
+  font-size: clamp(2.6rem, 9vh, 5rem);
+  line-height: 0.98;
+  margin: 0.4rem 0 0.6rem;
+}
+
+.yw-source-note {
+  font-family: var(--yr-tech-family, var(--mono));
+  font-size: var(--fs-note);
+  color: var(--yr-muted, #82755c);
+  margin-top: 0.5rem;
+}
+
+/* theme lenses — vertical column on the left, vizref-style */
+.yw-chips {
+  position: absolute;
+  left: 5vw;
+  top: 34vh;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.55rem;
+  opacity: 0;
+  will-change: opacity, transform;
+}
+
+/* the field: stations travel horizontally beneath the fixed marker */
+.yw-field {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  opacity: var(--yw-reveal, 1);
+}
+
+.yw-station {
+  position: absolute;
+  left: 58%;
+  top: 13vh;
+  width: min(56rem, 58vw);
+  max-height: 68vh;
+  display: grid;
+  grid-template-columns: minmax(260px, 44%) 1fr;
+  gap: 2rem;
+  align-items: center;
+  padding: 1.6rem 1.8rem;
+  visibility: hidden;
+  will-change: transform, opacity;
+  transform: translate(-50%, 0);
+}
+
+.yw-station.surface-paper {
+  background: color-mix(in srgb, var(--yr-paper, #efece4) 88%, transparent);
+}
+
+.yw-station .mf-media img {
+  max-height: 46vh;
+}
+
+.yw-station-body {
+  position: relative;
+  min-width: 0;
+}
+
+/* modernist heavy rule above each text block (period accent) */
+.yw-station-body::before {
+  content: '';
+  display: block;
+  width: 3.2rem;
+  height: 4px;
+  margin-bottom: 1rem;
+  background: var(--yr-sub-accent, var(--yr-accent, #a4552e));
+}
+
+.yw-station[data-role='overview'] .yw-station-body::before,
+.yw-station[data-role='closing'] .yw-station-body::before {
+  display: none;
+}
+
+.yw-overview-title {
+  font-family: var(--yr-display-family, var(--serif));
+  font-weight: var(--yr-display-weight, 400);
+  letter-spacing: var(--yr-display-ls, normal);
+  font-size: clamp(2rem, 5.2vh, 3.1rem);
+  line-height: 1.04;
+  color: var(--yr-ink, #26241e);
+  margin: 0 0 1rem;
+}
+
+.yw-station .yp-thesis,
+.yw-station .yp-chips {
+  opacity: 1; /* arrival choreography owns the mast/chips, not station copy */
+}
+
+.yw-overview-thesis {
+  font-size: clamp(1.05rem, 2.3vh, 1.3rem);
+  max-width: 34rem;
+}
+
+.yw-context-note {
+  font-family: var(--yr-tech-family, var(--mono));
+  font-size: var(--fs-note);
+  color: var(--yr-muted, #82755c);
+  margin-top: 0.9rem;
+}
+
+.yw-station.surface-plate .yw-context-note {
+  color: var(--yr-plate-ink-muted, #8a94a6);
+}
+
+.yw-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.1rem;
+  margin-top: 0.8rem;
+  font-family: var(--yr-tech-family, var(--mono));
+  font-size: var(--fs-note);
+  color: var(--yr-muted, #82755c);
+}
+
+.yw-provenance {
+  margin-top: 0.9rem;
+  font-family: var(--yr-tech-family, var(--mono));
+  font-size: var(--fs-note);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--yr-muted, #82755c) 80%, transparent);
+}
+
+.yw-station.dim {
+  filter: saturate(0.35) contrast(0.92);
+}
+
+.yw-station.dim .yw-station-body {
+  opacity: 0.45;
+}
+
+/* explicit stepping controls (narrow/touch safety net) */
+.yw-nav {
+  display: none;
+  position: absolute;
+  right: 3vw;
+  top: 6vh;
+  z-index: 5;
+  gap: 0.5rem;
+}
+
+.yw-step {
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--yr-ink, #26241e) 35%, transparent);
+  background: color-mix(in srgb, var(--yr-paper, #efece4) 82%, transparent);
+  color: var(--yr-ink, #26241e);
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+.yw-step:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+/* ---------- the local Line ---------- */
+
+.yw-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(91.7vh - 0.95rem);
+  bottom: 0;
+  z-index: 4;
+  opacity: 0.25;
+  will-change: opacity;
+}
+
+.yw-line-band {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0.95rem;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(127, 168, 217, 0.55) 10%,
+    rgba(127, 168, 217, 0.55) 90%,
+    transparent
+  );
+  box-shadow: 0 0 12px rgba(127, 168, 217, 0.28);
+  pointer-events: none;
+}
+
+.yw-track {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
+}
+
+.yw-tick {
+  position: absolute;
+  left: calc(var(--ti) * var(--yw-spacing, 14vw));
+  top: 0;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 11rem;
+  text-align: center;
+  cursor: pointer;
+  padding-top: 1.55rem;
+}
+
+.yw-dot {
+  position: absolute;
+  top: calc(0.95rem + 1px);
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(127, 168, 217, 0.8);
+  transform: translate(-50%, -50%);
+  transition: background 0.3s ease, box-shadow 0.3s ease;
+}
+
+.yw-tick[data-active] .yw-dot {
+  background: var(--gold);
+  box-shadow: 0 0 12px rgba(232, 184, 74, 0.8);
+}
+
+.yw-tick-y {
+  display: block;
+  font-family: var(--serif);
+  font-size: 0.92rem;
+  color: var(--ink-dim);
+  transition: color 0.3s ease, font-size 0.3s ease;
+}
+
+.yw-tick[data-active] .yw-tick-y {
+  color: var(--gold);
+  font-size: 1.18rem;
+  text-shadow: 0 0 16px rgba(232, 184, 74, 0.4);
+}
+
+.yw-tick-s {
+  display: block;
+  margin-top: 0.25rem;
+  font-family: var(--sans);
+  font-size: var(--fs-note);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--ink-dim) 70%, transparent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 11rem;
+}
+
+.yw-tick:not([data-active]) .yw-tick-s {
+  opacity: 0.75;
+}
+
+.yw-tick.dim {
+  opacity: 0.3 !important;
+}
+
+/* the FIXED local temporal marker — the lens, one depth deeper */
+.yw-marker {
+  position: absolute;
+  left: 50vw;
+  top: calc(0.95rem + 1px);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.yw-marker-pulse {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 12px rgba(232, 184, 74, 0.85);
+  position: relative;
+}
+
+.yw-marker-pulse::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  border: 1px solid var(--gold);
+  animation: ypPulse var(--yr-pulse, 1.82s) ease-out infinite;
+}
+
+/* integrity note — quiet, structural, constant across years */
+.yw-note {
+  position: absolute;
+  right: 2.2vw;
+  bottom: 0.55rem;
+  z-index: 5;
+  margin: 0;
+  max-width: 30rem;
+  text-align: right;
+  font-family: var(--yr-tech-family, var(--mono));
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--yr-muted, #82755c) 75%, transparent);
+  pointer-events: none;
+}
+
+/* ---------- narrow layouts: navigable, never broken ---------- */
+
+@media (max-width: 900px) {
+  .yw-mast {
+    max-width: 60vw;
+  }
+
+  .yw-title {
+    font-size: clamp(2rem, 6vh, 3rem);
+  }
+
+  .yw-chips {
+    top: auto;
+    bottom: 16vh;
+    left: 4vw;
+    right: 4vw;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .yw-station {
+    left: 50%;
+    top: 16vh;
+    width: 92vw;
+    max-height: 58vh;
+    grid-template-columns: 1fr;
+    gap: 0.9rem;
+    padding: 1rem;
+    overflow: hidden;
+  }
+
+  .yw-station .mf-media img {
+    max-height: 24vh;
+  }
+
+  .yw-nav {
+    display: flex;
+  }
+
+  .yw-tick:not([data-active]) .yw-tick-s {
+    display: none;
+  }
+
+  .yw-note {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .yw-marker-pulse::after {
+    animation: none;
+    transform: scale(1.4);
+    opacity: 0.35;
+  }
+
+  .yw-dot,
+  .yw-tick-y {
+    transition: none;
+  }
 }

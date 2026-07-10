@@ -2,354 +2,483 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ANCHORS } from '@/src/data/anchors';
-import { getYolYear } from '@/src/data/yol';
 import {
   getAsset,
   getRoleAsset,
   getSectionAsset,
   getYearIdentity,
 } from '@/src/data/identity';
-import { useExperience } from '../store';
+import { useExperience, useTuning } from '../store';
 import {
+  localTimeState,
   motionPref,
+  setLocalTimeline,
   setThemeLenses,
   themeFocus,
   yolReveal,
 } from '../runtime';
+import { approach, stepIndex } from '../time';
 import { identityCssVars } from './identity-css';
 import { MediaFrame } from './media/MediaFrame';
+import { useYolViewModel } from './useYolData';
+import type { YolPointVM } from './yol-view-model';
 
 /**
- * The Year-on-Line page. Fully year-driven: the active anchor selects the
- * year's CONTENT (src/data/yol registry) and its VISUAL IDENTITY
- * (src/data/identity registry). Nothing here is specific to any single
- * year — 1969 and 1769 render through the same structure.
+ * The Year-on-Line page: a NESTED LOCAL TIMELINE WORLD inside the year.
  *
- * Structural identity, constant across years: the Line strip and its pulse,
- * theme lenses carrying the same colours as their theme spheres in Line
- * View, caption/provenance conventions, the return control, arrival
- * choreography. Period styling comes ONLY from `--yr-*` CSS variables set
- * here from the identity.
+ * Spatial grammar (mirrors the parent Line):
+ * - the local Line sits near the bottom (~91.7vh, `yolLineVh`) with a FIXED
+ *   local temporal marker; the chronology moves beneath it;
+ * - wheel down = earlier, wheel up = later; ←/→ step points (inputs live in
+ *   Experience.tsx and write `localTimeState`, exactly like the parent);
+ * - the field above the Line travels with the same position at a deeper
+ *   parallax, so changing the active point reads as moving through the
+ *   year, not as paging a carousel.
+ *
+ * Content comes from ONE view model (useYolViewModel): database-backed when
+ * a composition exists, the isolated prototype registry otherwise. The
+ * renderer cannot tell the difference and never sees raw DB rows.
+ *
+ * Year styling still comes ONLY from the Year Visual Identity (`--yr-*`
+ * vars + manifest assets) — 1969 stays space-age editorial, 1769 stays
+ * engraved broadsheet; this component is year-agnostic.
  */
-
-/** Lens keys are normalised anchor theme ids ('cold-war' → 'coldwar'). */
-const lensKey = (themeId: string) => themeId.replace(/-/g, '');
 
 export function YolPage() {
   const mode = useExperience((s) => s.mode);
   const activeIndex = useExperience((s) => s.activeIndex);
   const anchor = ANCHORS[activeIndex];
   const yearId = anchor?.id ?? '';
-  const year = getYolYear(yearId);
   const identity = getYearIdentity(yearId);
+  const { vm, state } = useYolViewModel(yearId);
 
-  /** Theme lenses: same colour + orb as the theme spheres orbiting the
-   *  Temporal Earth (structural); long-form labels from the year content. */
-  const lenses = useMemo(() => {
-    if (!anchor || !year) return [];
-    return anchor.themes.map((t, i) => ({
-      key: lensKey(t.id),
-      label: year.content.themeLabels[i] ?? t.label,
-      hue: t.color,
-    }));
-  }, [anchor, year]);
-
-  const [activeLens, setActiveLens] = useState<string | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const headRef = useRef<HTMLDivElement>(null);
-  const thesisRef = useRef<HTMLParagraphElement>(null);
+  const [pinnedLens, setPinnedLens] = useState<string | null>(null);
+  const [hoverLens, setHoverLens] = useState<string | null>(null);
+  const activeLens = hoverLens ?? pinnedLens;
+  const [activePoint, setActivePoint] = useState(0);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const mastRef = useRef<HTMLDivElement>(null);
   const chipsRef = useRef<HTMLDivElement>(null);
-  const hintRef = useRef<HTMLDivElement>(null);
+  const fieldRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
   const lineRef = useRef<HTMLElement>(null);
+  const activePointRef = useRef(0);
+  const debug = useMemo(
+    () =>
+      typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('debug') === '1',
+    []
+  );
 
   // install this year's lens keys into the shared runtime focus state
   useEffect(() => {
-    setThemeLenses(lenses.map((l) => l.key));
-    setActiveLens(null);
-  }, [lenses]);
+    if (!vm) return;
+    setThemeLenses(vm.lenses.map((l) => l.key));
+    setPinnedLens(null);
+    setHoverLens(null);
+  }, [vm?.yearId, vm?.source]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // arrival choreography: hero elements read yolReveal each frame
+  // install the local timeline; entering a year starts at ITS overview
+  useEffect(() => {
+    if (!vm) return;
+    const untouched = localTimeState.lastInputMs < 0;
+    if (mode === 'yol' && !untouched) {
+      // source upgraded mid-visit (fallback -> database): keep the visitor's
+      // position, clamped to the new chronology
+      const clamped = Math.min(Math.round(localTimeState.pos), vm.points.length - 1);
+      setLocalTimeline(vm.points.length, Math.max(0, clamped));
+      localTimeState.lastInputMs = performance.now();
+    } else {
+      setLocalTimeline(vm.points.length, vm.initialIndex);
+    }
+    setActivePoint(Math.round(localTimeState.pos));
+    activePointRef.current = Math.round(localTimeState.pos);
+  }, [vm?.yearId, vm?.source, vm?.points.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // fresh entry resets to the entered year's overview
+  useEffect(() => {
+    if (mode === 'yol' && vm) {
+      setLocalTimeline(vm.points.length, vm.initialIndex);
+      setActivePoint(vm.initialIndex);
+      activePointRef.current = vm.initialIndex;
+    }
+  }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /**
+   * The per-frame heart: eases pos toward target (parent-Line snap
+   * discipline), then writes transforms for the track, ticks and field
+   * stations. Per-frame values never touch React state; only the DISCRETE
+   * active index (for aria + dim classes) crosses into a state update.
+   */
   useEffect(() => {
     let raf = 0;
-    const apply = (el: HTMLElement | null, v: number, rise = 16) => {
-      if (!el) return;
-      el.style.opacity = String(v);
-      el.style.transform = `translateY(${(1 - v) * rise}px)`;
-    };
+    let last = performance.now();
     const tick = () => {
-      apply(headRef.current, yolReveal.text);
-      apply(thesisRef.current, yolReveal.text, 12);
+      raf = requestAnimationFrame(tick);
+      const now = performance.now();
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      const t = useTuning.getState();
+      const count = localTimeState.count;
+      if (count === 0) return;
+
+      // soft snap after idle, same grammar as LineScene
+      const idle = now - localTimeState.lastInputMs;
+      if (idle > t.localSnapDelayMs) {
+        const snapTarget = Math.round(localTimeState.target);
+        localTimeState.target = approach(
+          localTimeState.target,
+          snapTarget,
+          t.localSnapStrength,
+          dt
+        );
+        if (Math.abs(localTimeState.target - snapTarget) < 0.0008) {
+          localTimeState.target = snapTarget;
+        }
+      }
+      localTimeState.pos = motionPref.reduced
+        ? localTimeState.target
+        : approach(localTimeState.pos, localTimeState.target, 10, dt);
+      const pos = localTimeState.pos;
+
+      // the chronology slides beneath the fixed marker
+      const track = trackRef.current;
+      if (track) {
+        track.style.setProperty('--yw-spacing', `${t.localTickSpacingVw}vw`);
+        track.style.transform = `translateX(calc(50vw - ${(pos * t.localTickSpacingVw).toFixed(3)}vw))`;
+        const ticks = track.children;
+        for (let i = 0; i < ticks.length; i++) {
+          const el = ticks[i] as HTMLElement;
+          const d = Math.abs(i - pos);
+          el.style.opacity = String(Math.max(0.25, 1 - d * 0.22));
+          el.dataset.active = d < 0.5 ? 'true' : undefined as unknown as string;
+          if (d >= 0.5) delete el.dataset.active;
+        }
+      }
+
+      // the field above travels further per unit — nested-world parallax
+      const field = fieldRef.current;
+      if (field) {
+        const stations = field.children;
+        for (let i = 0; i < stations.length; i++) {
+          const el = stations[i] as HTMLElement;
+          const dx = i - pos;
+          const d = Math.abs(dx);
+          const visible = d < 1.6;
+          el.style.visibility = visible ? 'visible' : 'hidden';
+          if (!visible) continue;
+          const travel = motionPref.reduced ? 0 : dx * t.localFieldTravelVw;
+          const scale = motionPref.reduced ? 1 : 1 - Math.min(0.06, d * 0.045);
+          el.style.transform = `translate(-50%, 0) translateX(${travel.toFixed(2)}vw) scale(${scale.toFixed(3)})`;
+          el.style.opacity = String(Math.max(0, 1 - d * (motionPref.reduced ? 1 : 1.15)));
+          el.style.pointerEvents = d < 0.5 ? 'auto' : 'none';
+        }
+      }
+
+      // arrival choreography (env → text → themes → line)
+      const apply = (el: HTMLElement | null, v: number, rise = 14) => {
+        if (!el) return;
+        el.style.opacity = String(v);
+        el.style.transform = `translateY(${((1 - v) * rise).toFixed(1)}px)`;
+      };
+      apply(mastRef.current, yolReveal.text);
       apply(chipsRef.current, yolReveal.themes, 10);
-      apply(hintRef.current, yolReveal.line, 6);
-      // the Line strip resolves last, as The Line hands over to the year
+      if (fieldRef.current) {
+        fieldRef.current.style.setProperty('--yw-reveal', String(yolReveal.subject));
+      }
       if (lineRef.current) {
         lineRef.current.style.opacity = String(0.25 + yolReveal.line * 0.75);
       }
-      raf = requestAnimationFrame(tick);
+
+      // discrete active point (aria/dim/testids)
+      const nearest = Math.min(count - 1, Math.max(0, Math.round(pos)));
+      if (nearest !== activePointRef.current) {
+        activePointRef.current = nearest;
+        setActivePoint(nearest);
+      }
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  // fresh entry starts at the top of the page
+  // touch/drag travel for narrow layouts (and mice that prefer dragging)
   useEffect(() => {
-    if (mode === 'yol') scrollRef.current?.scrollTo({ top: 0 });
-  }, [mode]);
-
-  // scroll-triggered reveals
-  useEffect(() => {
-    const root = scrollRef.current;
+    const root = rootRef.current;
     if (!root) return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((e) => {
-          if (e.isIntersecting) e.target.classList.add('in-view');
-        });
-      },
-      { root, threshold: 0.18 }
-    );
-    root.querySelectorAll('.reveal').forEach((el) => io.observe(el));
-    return () => io.disconnect();
-  }, [yearId]);
-
-  // Restrained depth: imagery drifts slightly slower than the page.
-  // Transform-only, one rAF per scroll burst, skipped under reduced motion.
-  useEffect(() => {
-    const root = scrollRef.current;
-    if (!root || motionPref.reduced) return;
-    let raf = 0;
-    const apply = () => {
-      raf = 0;
-      const vh = root.clientHeight;
-      root.querySelectorAll<HTMLElement>('.yp-event .mf').forEach((fig) => {
-        const r = fig.getBoundingClientRect();
-        const off = (r.top + r.height / 2 - vh / 2) / vh;
-        fig.style.transform = `translateY(${(-off * 16).toFixed(1)}px)`;
-      });
-      const hero = root.querySelector<HTMLElement>('.yp-hero-art');
-      if (hero) {
-        const fx = hero.dataset.fx ?? '50%';
-        const fy = hero.dataset.fy ?? '50%';
-        hero.style.backgroundPosition = `${fx} calc(${fy} + ${(
-          root.scrollTop * 0.06
-        ).toFixed(1)}px)`;
-      }
+    let dragging = false;
+    let lastX = 0;
+    const unitPx = () => (window.innerWidth * useTuning.getState().localTickSpacingVw) / 100;
+    const down = (e: PointerEvent) => {
+      if (useExperience.getState().locked) return;
+      if ((e.target as HTMLElement).closest('button')) return;
+      dragging = true;
+      lastX = e.clientX;
     };
-    const onScroll = () => {
-      if (!raf) raf = requestAnimationFrame(apply);
+    const move = (e: PointerEvent) => {
+      if (!dragging || localTimeState.count === 0) return;
+      const dx = e.clientX - lastX;
+      lastX = e.clientX;
+      // dragging the world right moves you earlier — direct manipulation
+      const next = localTimeState.target - dx / unitPx();
+      localTimeState.target = Math.min(localTimeState.count - 1, Math.max(0, next));
+      localTimeState.lastInputMs = performance.now();
     };
-    root.addEventListener('scroll', onScroll, { passive: true });
-    apply();
+    const up = () => {
+      dragging = false;
+    };
+    root.addEventListener('pointerdown', down);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
     return () => {
-      root.removeEventListener('scroll', onScroll);
-      if (raf) cancelAnimationFrame(raf);
+      root.removeEventListener('pointerdown', down);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
     };
-  }, [yearId]);
+  }, []);
 
-  const focusLens = (key: string | null) => {
+  const applyFocus = (key: string | null) => {
     Object.keys(themeFocus.target).forEach((k) => {
       themeFocus.target[k] = k === key ? 1 : 0;
     });
-    setActiveLens(key);
   };
 
-  if (!year) return null;
+  const step = (dir: -1 | 1) => {
+    if (useExperience.getState().locked || localTimeState.count === 0) return;
+    localTimeState.target = stepIndex(
+      Math.round(localTimeState.target),
+      dir,
+      localTimeState.count - 1
+    );
+    localTimeState.lastInputMs = performance.now();
+  };
 
-  const heroAsset = getRoleAsset(identity, 'hero');
-  const closingAsset = getRoleAsset(identity, 'atmosphere');
-  const interludeAssets = year.interludeAssetIds
-    .map((id) => getAsset(identity, id))
-    .filter((a): a is NonNullable<typeof a> => a !== null);
-  const heroMotifClass = identity.layout.heroMotif
-    ? ` motif-${identity.layout.heroMotif}`
-    : '';
+  if (!vm) return null;
+
+  const stationAsset = (p: YolPointVM) => {
+    if (p.role === 'overview') return getRoleAsset(identity, 'hero');
+    if (p.role === 'closing') return getRoleAsset(identity, 'atmosphere');
+    if (!p.sectionKey) return null;
+    return getSectionAsset(identity, p.sectionKey) ?? getAsset(identity, p.sectionKey);
+  };
+
+  const active = vm.points[activePoint];
 
   return (
     <div
-      ref={scrollRef}
-      className="yol-page"
+      ref={rootRef}
+      className="yol-page yol-world"
       data-lens={activeLens ?? undefined}
       data-year={yearId}
+      data-source={vm.source}
+      data-active-point={active?.id}
       data-testid="yol-page"
       style={identityCssVars(identity) as React.CSSProperties}
     >
-      {/* hero: period display type; decorations come from the identity */}
-      <section className={`yp-hero${heroMotifClass}`}>
-        <div className="yp-col">
-          <div ref={headRef} className="yp-head">
-            <div className="yp-kicker">Year on Line</div>
-            <h2 className="yp-title" data-testid="yol-title">
-              {year.content.title}
-            </h2>
-            <div className="yp-rule" aria-hidden />
-          </div>
-          <p ref={thesisRef} className="yp-thesis">
-            {year.content.thesis}
-          </p>
-          <div
-            ref={chipsRef}
-            className="yp-chips"
-            role="group"
-            aria-label="Theme lenses — focus to re-weight the year"
-          >
-            {lenses.map((lens) => (
-              <button
-                key={lens.key}
-                className="yp-chip"
-                style={{ ['--chip' as string]: lens.hue }}
-                data-testid={`lens-${lens.key}`}
-                data-active={activeLens === lens.key || undefined}
-                aria-pressed={activeLens === lens.key}
-                onMouseEnter={() => focusLens(lens.key)}
-                onMouseLeave={() => focusLens(null)}
-                onFocus={() => focusLens(lens.key)}
-                onBlur={() => focusLens(null)}
-              >
-                <i className="yp-orb" aria-hidden />
-                {lens.label}
-              </button>
-            ))}
-          </div>
-          <div ref={hintRef} className="yp-scrollhint">
-            Scroll to explore the year ↓
-          </div>
-        </div>
-        <div
-          className="yp-hero-art"
-          role="img"
-          aria-label={heroAsset?.alt}
-          data-state={heroAsset?.assetState}
-          data-fx={heroAsset?.focal ? `${Math.round(heroAsset.focal.x * 100)}%` : undefined}
-          data-fy={heroAsset?.focal ? `${Math.round(heroAsset.focal.y * 100)}%` : undefined}
-          style={
-            heroAsset
-              ? {
-                  backgroundImage: `url('${heroAsset.path}')`,
-                  backgroundPosition: heroAsset.focal
-                    ? `${Math.round(heroAsset.focal.x * 100)}% ${Math.round(heroAsset.focal.y * 100)}%`
-                    : undefined,
-                }
-              : undefined
-          }
-        />
-      </section>
+      {/* masthead: the year, in its period voice */}
+      <div ref={mastRef} className="yw-mast">
+        <div className="yp-kicker">Year on Line</div>
+        <h2 className="yp-title yw-title" data-testid="yol-title">
+          {vm.title}
+        </h2>
+        <div className="yp-rule" aria-hidden />
+        {debug && vm.source === 'fallback' && (
+          <div className="yw-source-note">fallback content · {state.fallbackReason}</div>
+        )}
+      </div>
 
-      {/* event sections, each through its identity substyle; the asset that
-          illustrates a section is resolved from the manifest, never by id */}
-      <div className="yp-events">
-        {year.events.map((ev, i) => {
-          const sub = identity.themes[ev.section];
-          const asset = getSectionAsset(identity, ev.section);
+      {/* theme lenses — same colours as the theme spheres in Line View */}
+      <div
+        ref={chipsRef}
+        className="yp-chips yw-chips"
+        role="group"
+        aria-label="Theme lenses — focus to re-weight the year"
+      >
+        {vm.lenses.map((lens) => (
+          <button
+            key={lens.key}
+            className="yp-chip"
+            style={{ ['--chip' as string]: lens.hue }}
+            data-testid={`lens-${lens.key}`}
+            data-active={activeLens === lens.key || undefined}
+            aria-pressed={activeLens === lens.key}
+            onClick={() => {
+              // clicking pins a lens (toggles); hovering is transient
+              const next = pinnedLens === lens.key ? null : lens.key;
+              setPinnedLens(next);
+              applyFocus(next);
+            }}
+            onMouseEnter={() => {
+              setHoverLens(lens.key);
+              applyFocus(lens.key);
+            }}
+            onMouseLeave={() => {
+              setHoverLens(null);
+              applyFocus(pinnedLens);
+            }}
+            onFocus={() => {
+              setHoverLens(lens.key);
+              applyFocus(lens.key);
+            }}
+            onBlur={() => {
+              setHoverLens(null);
+              applyFocus(pinnedLens);
+            }}
+          >
+            <i className="yp-orb" aria-hidden />
+            {lens.label}
+          </button>
+        ))}
+      </div>
+
+      {/* the field: the year's material above the local Line */}
+      <div ref={fieldRef} className="yw-field" aria-live="polite">
+        {vm.points.map((p, i) => {
+          const sub = p.sectionKey ? identity.themes[p.sectionKey] : undefined;
           const surface = sub?.surface ?? 'paper';
-          const flip = identity.layout.alternate && i % 2 === 1;
+          const asset = stationAsset(p);
           const dim =
-            activeLens !== null && !ev.themes.includes(activeLens);
+            activeLens !== null &&
+            p.role !== 'overview' &&
+            p.role !== 'closing' &&
+            !p.themes.includes(activeLens);
           return (
             <section
-              key={ev.id}
-              className={`yp-event reveal${flip ? ' flip' : ''} surface-${surface}${
-                dim ? ' dim' : ''
-              }`}
-              data-themes={ev.themes.join(' ')}
-              data-section={ev.section}
+              key={p.id}
+              className={`yw-station surface-${surface}${dim ? ' dim' : ''}`}
+              data-role={p.role}
+              data-section={p.sectionKey ?? undefined}
               data-motif={sub?.motif}
+              data-themes={p.themes.join(' ')}
+              data-testid={`station-${p.id}`}
+              aria-hidden={i !== activePoint}
               style={
                 sub
                   ? ({ '--yr-sub-accent': sub.accent } as React.CSSProperties)
                   : undefined
               }
             >
-              {asset && <MediaFrame asset={asset} identity={identity} />}
-              <div className="yp-event-body">
-                <div className="yp-event-date">{ev.date}</div>
-                <h3 className="yp-event-title">{ev.title}</h3>
-                <p className="yp-event-text">{ev.text}</p>
-                <div className="yp-event-tags">
-                  {ev.themes.map((t) => {
-                    const lens = lenses.find((l) => l.key === t);
-                    return (
-                      <span key={t} style={{ ['--chip' as string]: lens?.hue }}>
-                        <i className="yp-orb" aria-hidden />
-                        {lens?.label ?? t}
+              {asset && (
+                <MediaFrame
+                  asset={asset}
+                  identity={identity}
+                  treatment={p.role === 'closing' ? 'panorama' : undefined}
+                  captioned={p.role !== 'overview' && p.role !== 'closing'}
+                  className="yw-station-media"
+                />
+              )}
+              <div className="yw-station-body">
+                {p.dateLabel && <div className="yp-event-date">{p.dateLabel}</div>}
+                {p.role === 'context' && (
+                  <div className="yp-event-date">{p.yearLabel}</div>
+                )}
+                <h3 className={p.role === 'overview' ? 'yw-overview-title' : 'yp-event-title'}>
+                  {p.headline}
+                </h3>
+                {p.summary && (
+                  <p className={p.role === 'overview' ? 'yp-thesis yw-overview-thesis' : 'yp-event-text'}>
+                    {p.summary}
+                  </p>
+                )}
+                {p.role === 'context' && (
+                  <p className="yw-context-note">
+                    A neighbouring year on the Line — descend there for its own world.
+                  </p>
+                )}
+                {p.role === 'closing' && (
+                  <p className="yw-context-note">
+                    Scroll back through the year, or return to the Line above.
+                  </p>
+                )}
+                {p.themes.length > 0 && (
+                  <div className="yp-event-tags">
+                    {p.themes.map((tk) => {
+                      const lens = vm.lenses.find((l) => l.key === tk);
+                      return (
+                        <span key={tk} style={{ ['--chip' as string]: lens?.hue }}>
+                          <i className="yp-orb" aria-hidden />
+                          {lens?.label ?? tk}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+                {p.sources.length > 0 && (
+                  <div className="yw-sources" data-testid="point-sources">
+                    {p.sources.map((s2, j) => (
+                      <span key={j}>
+                        {s2.title}
+                        {s2.locator ? ` · ${s2.locator}` : ''}
                       </span>
-                    );
-                  })}
-                </div>
+                    ))}
+                  </div>
+                )}
+                {p.provenance === 'placeholder' && p.role !== 'closing' && (
+                  <div className="yw-provenance">provisional · unsourced placeholder</div>
+                )}
               </div>
             </section>
           );
         })}
       </div>
 
-      {/* interlude plates: finished assets read as a quiet measured moment;
-          placeholder slots stay visibly provisional dev surfaces */}
-      {interludeAssets.length > 0 && (
-        <section
-          className={`yp-interlude reveal${
-            interludeAssets.length === 1 ? ' single' : ''
-          }`}
-          aria-label="Interlude plates"
+      {/* explicit stepping — the touch/narrow-safe control */}
+      <div className="yw-nav" aria-hidden={false}>
+        <button
+          className="yw-step"
+          data-testid="local-prev"
+          aria-label="Earlier on the local timeline"
+          onClick={() => step(-1)}
         >
-          {interludeAssets.map((slot) => (
-            <div key={slot.id} className="yp-slot">
-              <MediaFrame
-                asset={slot}
-                identity={identity}
-                treatment={
-                  slot.assetState === 'placeholder' ? 'archival-frame' : undefined
-                }
-              />
-              {slot.assetState === 'placeholder' && (
-                <span className="yp-slot-id">slot: {slot.section}</span>
-              )}
+          ←
+        </button>
+        <button
+          className="yw-step"
+          data-testid="local-next"
+          aria-label="Later on the local timeline"
+          onClick={() => step(1)}
+        >
+          →
+        </button>
+      </div>
+
+      {/* The local Line: same object as the parent Line, one level deeper.
+          The chronology track slides beneath a FIXED local temporal marker. */}
+      <footer ref={lineRef} className="yw-line" data-testid="local-line">
+        <div className="yw-line-band" aria-hidden />
+        <div ref={trackRef} className="yw-track">
+          {vm.points.map((p, i) => (
+            <div
+              key={p.id}
+              className={`yw-tick role-${p.role}${
+                activeLens !== null && p.role === 'development' && !p.themes.includes(activeLens)
+                  ? ' dim'
+                  : ''
+              }`}
+              style={{ ['--ti' as string]: String(i) }}
+              data-testid={`tick-${p.id}`}
+              onClick={() => {
+                if (useExperience.getState().locked) return;
+                localTimeState.target = i;
+                localTimeState.lastInputMs = performance.now();
+              }}
+            >
+              <i className="yw-dot" aria-hidden />
+              <span className="yw-tick-y">{p.tickLabel}</span>
+              <span className="yw-tick-s">{p.role === 'overview' ? vm.supportingLine ?? '' : p.headline}</span>
             </div>
           ))}
-        </section>
-      )}
-
-      {/* pull-quote — only when the year has a VERIFIED quotation */}
-      {year.quote && (
-        <section className="yp-quote reveal">
-          <blockquote>
-            <span className="yp-qmark">“</span>
-            {year.quote.text}
-            <span className="yp-qmark">”</span>
-          </blockquote>
-          <cite>— {year.quote.attribution}</cite>
-        </section>
-      )}
-
-      {/* closing reflection: panoramic atmosphere + integrity note */}
-      <section className="yp-closing reveal">
-        {closingAsset && (
-          <MediaFrame
-            asset={closingAsset}
-            identity={identity}
-            treatment="panorama"
-            captioned={false}
-          />
-        )}
-        <p className="yp-note">
-          Artwork is project-directed generated illustration, illustrative
-          reconstruction or a placeholder slot — never archival media. Event
-          summaries are placeholders pending editorial verification.
-        </p>
-      </section>
-
-      {/* The Line, inside the year — structural identity, shared with Line
-          View: gold at the active year, cooling with temporal distance, the
-          same pulse rhythm. It resolves back into the main Line on return. */}
-      <footer ref={lineRef} className="yp-timeline">
-        <div className="yp-tl-line" aria-hidden />
-        {year.neighbours.map((n) => (
-          <div key={n.year} className={`yp-tl-year${n.active ? ' active' : ''}`}>
-            <i className="yp-tl-tick" aria-hidden />
-            {n.active && <i className="yp-tl-pulse" aria-hidden />}
-            <span className="yp-tl-y">{n.year}</span>
-            <span className="yp-tl-s">{n.label}</span>
-          </div>
-        ))}
+        </div>
+        <div className="yw-marker" aria-hidden>
+          <i className="yw-marker-pulse" />
+        </div>
       </footer>
+
+      {/* integrity note — structural convention, constant across years */}
+      <p className="yw-note">
+        Artwork is project-directed generated illustration or a placeholder
+        slot — never archival media. Provisional summaries await editorial
+        verification and sourcing.
+      </p>
     </div>
   );
 }

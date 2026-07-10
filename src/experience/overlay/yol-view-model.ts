@@ -25,6 +25,8 @@ export interface YolPointVM {
   yearLabel: string;
   /** full display date ("July 20, 1969"); empty for overview/closing */
   dateLabel: string;
+  /** short label under the point's tick on the local Line ("Jul 20") */
+  tickLabel: string;
   headline: string;
   summary: string;
   /** lens keys this point responds to; overview/closing never dim */
@@ -51,6 +53,18 @@ export interface YolViewModel {
 /** Lens keys are normalised anchor theme ids ('cold-war' -> 'coldwar'). */
 export const lensKey = (themeId: string) => themeId.replace(/-/g, '');
 
+const MONTH_ABBREV = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "July 20, 1969" -> "Jul 20"; "August 15–18, 1969" -> "Aug 15–18". */
+export function shortDateLabel(dateLabel: string): string {
+  const withoutYear = dateLabel.replace(/,?\s*(c\.\s*)?[\d,]+( BCE)?\s*$/, '').trim();
+  if (!withoutYear) return '';
+  return withoutYear.replace(/^([A-Za-z]+)/, (m) => {
+    const idx = MONTH_ABBREV.findIndex((a) => m.startsWith(a));
+    return idx >= 0 ? MONTH_ABBREV[idx] : m;
+  });
+}
+
 function anchorHueByLens(anchor: Anchor): Map<string, string> {
   return new Map(anchor.themes.map((t) => [lensKey(t.id), t.color]));
 }
@@ -70,12 +84,16 @@ export function dbToViewModel(model: YolReadModel, anchor: Anchor): YolViewModel
   const points: YolPointVM[] = model.points.map((p) => {
     const year = p.date?.year ?? anchor.year;
     const isYearOnly = !p.date?.month;
+    const dateLabel =
+      p.role === 'overview' || p.role === 'closing' || isYearOnly ? '' : (p.date?.display ?? '');
     return {
       id: p.id,
       role: p.role,
       year,
       yearLabel: formatYear(year),
-      dateLabel: p.role === 'overview' || p.role === 'closing' || isYearOnly ? '' : (p.date?.display ?? ''),
+      dateLabel,
+      tickLabel:
+        p.role === 'closing' ? '' : dateLabel ? shortDateLabel(dateLabel) : formatYear(year),
       headline: p.role === 'overview' ? model.title : p.headline,
       summary: p.role === 'overview' ? model.thesis : p.summary,
       themes: p.themes,
@@ -102,7 +120,6 @@ export function dbToViewModel(model: YolReadModel, anchor: Anchor): YolViewModel
 /* ------------------------------------------------------------------ */
 
 export function fallbackViewModel(yearYol: YearYol, anchor: Anchor): YolViewModel {
-  const hues = anchorHueByLens(anchor);
   const lenses: YolLensVM[] = anchor.themes.map((t, i) => ({
     key: lensKey(t.id),
     label: yearYol.content.themeLabels[i] ?? t.label,
@@ -110,7 +127,13 @@ export function fallbackViewModel(yearYol: YearYol, anchor: Anchor): YolViewMode
   }));
 
   const points: YolPointVM[] = [];
-  const push = (p: Omit<YolPointVM, 'yearLabel'>) => points.push({ ...p, yearLabel: formatYear(p.year) });
+  const push = (p: Omit<YolPointVM, 'yearLabel' | 'tickLabel'>) =>
+    points.push({
+      ...p,
+      yearLabel: formatYear(p.year),
+      tickLabel:
+        p.role === 'closing' ? '' : p.dateLabel ? shortDateLabel(p.dateLabel) : formatYear(p.year),
+    });
 
   const neighbours = yearYol.neighbours
     .filter((n) => !n.active)

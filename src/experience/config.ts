@@ -45,6 +45,18 @@ export const TUNING_DEFAULTS = {
   arrivalStageDur: 1.0,
   /** scale multiplier on the dominant YoL subject (Moon etc.) */
   subjectScale: 1.0,
+
+  // --- YoL local timeline (nested chronology world) ---
+  /** local-timeline units per wheel deltaY pixel inside a year */
+  localScrollSensitivity: 0.0032,
+  /** exponential rate the local target eases to the nearest point */
+  localSnapStrength: 5.0,
+  /** idle ms before local snapping engages */
+  localSnapDelayMs: 180,
+  /** vw between neighbouring ticks on the local Line */
+  localTickSpacingVw: 14,
+  /** vw the field content travels per local unit (parallax above the Line) */
+  localFieldTravelVw: 74,
 };
 
 export type Tuning = typeof TUNING_DEFAULTS;
