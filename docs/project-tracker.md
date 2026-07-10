@@ -56,3 +56,15 @@ Ready means the prompt and acceptance criteria are final. An agent (or
 Sahil) moves it to In Progress when execution starts. The executor moves
 it to Review with evidence attached. **Only Sahil moves an issue from
 Review to Done.**
+
+## Branch workflow
+
+`Ready → issue branch → In Progress → pull request → Review → Sahil
+approval → merge → Done`
+
+Branch naming: `issue-<number>/<short-description>` (kebab-case), created
+from the latest remote `main`. All substantive work happens on issue
+branches and arrives in `main` only through a pull request linked to its
+issue. **Only Sahil merges into `main` and moves issues from `Review` to
+`Done`.** Agents stop at `Review`. See `CLAUDE.md` for the full git rules
+and the session startup checklist.
