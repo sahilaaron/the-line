@@ -1,0 +1,119 @@
+# CI for The Line — validates pull requests with the repository's REAL local
+# verification commands (see package.json scripts + CLAUDE.md). No secrets,
+# no deployment, minimal permissions.
+#
+# Node version: the repo declares no engines/.nvmrc; Node 22 is the active
+# LTS the project is developed and verified against (issue #11). If an
+# .nvmrc is added later, switch setup-node to `node-version-file`.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Superseded runs on the same ref are cancelled.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  quality:
+    name: Lint · types · unit · db · build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      # npm ci honours the committed lockfile, which carries the
+      # load-bearing vite@7 pin (docs/implementation-notes.md, Cycle 3).
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests (non-database suites)
+        run: npx vitest run src/data src/experience
+
+      # PGlite runs as WASM inside vitest's fork pool (vitest.config.ts;
+      # worker_threads + WASM is a known fragile combination — do not
+      # change the pool or the vite pin without re-testing db:test).
+      #
+      # Retry policy — deliberately narrow: cold VMs have shown one-off
+      # WASM cold-start failures. We retry AT MOST ONCE; the first
+      # failure's full output stays in this step's log above the retry,
+      # and a deterministic failure still fails the job because the
+      # second run's exit code is authoritative.
+      - name: Database tests (PGlite, one bounded cold-start retry)
+        run: |
+          set +e
+          npm run db:test
+          first=$?
+          set -e
+          if [ "$first" -ne 0 ]; then
+            echo "::warning::db:test failed (exit $first). Retrying once for the known PGlite WASM cold-start class — the first failure log is preserved above. A second failure fails the job."
+            npm run db:test
+          fi
+
+      - name: Production build
+        run: npm run build
+
+  e2e:
+    name: Playwright (Chromium)
+    runs-on: ubuntu-latest
+    needs: quality
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium (+ OS deps)
+        run: npx playwright install --with-deps chromium
+
+      - name: Production build
+        run: npm run build
+
+      # The e2e suite runs against `next start` (playwright.config.ts
+      # webServer honours PW_SERVER_CMD) — same commands as local runs.
+      - name: Run e2e suite
+        run: npx playwright test --reporter=list,html
+        env:
+          PW_SERVER_CMD: npx next start -p 3011
+          PLAYWRIGHT_HTML_OPEN: never
+
+      # Failure evidence lives in short-retention CI artifacts, never in
+      # Git (docs/evidence/README.md).
+      - name: Upload Playwright report (failures only)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+          if-no-files-found: ignore
