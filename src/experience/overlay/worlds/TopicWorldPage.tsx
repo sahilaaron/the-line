@@ -200,6 +200,7 @@ export function TopicWorldPage({ frame }: { frame: TopicFrame }) {
                   <button
                     className="tw-doorway"
                     data-testid={`topic-link-${chapter.relatedTopicSlug}`}
+                    tabIndex={i === activeChapter ? 0 : -1}
                     onClick={(e) => openRelated(chapter, e.currentTarget)}
                   >
                     <span className="tw-doorway-kicker">Enter</span>

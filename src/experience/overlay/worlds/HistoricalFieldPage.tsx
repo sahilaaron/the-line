@@ -8,8 +8,20 @@
  *
  * Per-frame work: ease/snap the continuous time, translate 3 depth-layer
  * containers + the tick track, and write emphasis (opacity/scale/
- * interactivity) onto the visible plates. Layout itself is computed ONCE
- * per dataset by the deterministic algorithm in ../field/layout.ts.
+ * interactivity/tab-order) onto the visible plates. Layout itself is
+ * computed ONCE per dataset by the deterministic algorithm in
+ * ../field/layout.ts.
+ *
+ * Interaction parity with the rest of the experience:
+ *  - wheel / ArrowLeft-Right route through Experience.tsx (down/left =
+ *    earlier), behind the global lock;
+ *  - explicit field-prev / field-next controls mirror the YoL
+ *    local-prev/next for touch and keyboard-light users (disabled while
+ *    locked);
+ *  - pointer/touch drag converts horizontal travel into historical years
+ *    (px → years via fieldVwPerYear), the same method TopicWorldPage uses;
+ *  - a narrow-viewport check (matchMedia, NOT per frame) thins the mounted
+ *    collage without abandoning the temporal arrangement.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { HistoricalFieldItemVM } from '@/src/domain/worlds';
@@ -33,9 +45,25 @@ import { PlaceholderPlate } from './PlaceholderPlate';
 
 const DEPTHS = [0, 1, 2] as const;
 
+/** matchMedia-derived narrow flag, updated on change only (never per frame). */
+function useNarrow(): boolean {
+  const [narrow, setNarrow] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches
+  );
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 900px)');
+    const on = () => setNarrow(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return narrow;
+}
+
 export function HistoricalFieldPage({ frame }: { frame: HistoricalFieldFrame }) {
   const { vm, status } = useFieldVM(frame);
   const vwPerYear = useTuning((s) => s.fieldVwPerYear);
+  const locked = useExperience((s) => s.locked);
+  const narrow = useNarrow();
   const rootRef = useRef<HTMLDivElement>(null);
   const layerRefs = useRef<(HTMLDivElement | null)[]>([]);
   const trackRef = useRef<HTMLDivElement>(null);
@@ -71,11 +99,16 @@ export function HistoricalFieldPage({ frame }: { frame: HistoricalFieldFrame }) 
     el?.focus({ preventScroll: true });
   }, [frame.id, frame.restore.focusedItemId, vm]);
 
-  // the visible-window set only changes on discrete year boundaries
+  // the visible-window set only changes on discrete year boundaries; narrow
+  // viewports mount a thinner collage (tighter radius + front layers only)
+  // WITHOUT flattening the temporal arrangement into a card list
   const mounted = useMemo(() => {
     const t = useTuning.getState();
-    return visiblePlacements(layout, windowYear, t.fieldVisibleRadiusYears, t.fieldOverscanYears);
-  }, [layout, windowYear]);
+    const radius = narrow ? Math.min(5, t.fieldVisibleRadiusYears) : t.fieldVisibleRadiusYears;
+    const overscan = narrow ? 1 : t.fieldOverscanYears;
+    const vis = visiblePlacements(layout, windowYear, radius, overscan);
+    return narrow ? vis.filter((p) => p.depth <= 1) : vis;
+  }, [layout, windowYear, narrow]);
 
   /** THE per-frame loop: time easing + 4 container transforms + emphasis. */
   useEffect(() => {
@@ -139,6 +172,13 @@ export function HistoricalFieldPage({ frame }: { frame: HistoricalFieldFrame }) 
           el.style.opacity = String(e.opacity);
           el.style.transform = `translate(-50%, 0) scale(${e.scale.toFixed(3)})`;
           el.style.pointerEvents = e.interactive && inWorld ? 'auto' : 'none';
+          // accessibility: only meaningfully-reachable plates stay in the
+          // tab order — distant, non-interactive plates are removed from it
+          const ti = e.interactive ? '0' : '-1';
+          if (el.dataset.ti !== ti) {
+            el.dataset.ti = ti;
+            el.tabIndex = e.interactive ? 0 : -1;
+          }
           if (e.interactive) el.dataset.near = 'true';
           else delete el.dataset.near;
         });
@@ -147,6 +187,58 @@ export function HistoricalFieldPage({ frame }: { frame: HistoricalFieldFrame }) 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, []);
+
+  // pointer / touch drag on the field background: horizontal px → years,
+  // mirroring the TopicWorldPage drag (a dedicated hit surface keeps the
+  // plates themselves clickable; the field root stays hit-transparent).
+  useEffect(() => {
+    const surface = rootRef.current?.querySelector<HTMLElement>('.hf-drag');
+    if (!surface) return;
+    let dragging = false;
+    let lastX = 0;
+    const down = (e: PointerEvent) => {
+      if (useExperience.getState().locked) return;
+      dragging = true;
+      lastX = e.clientX;
+      surface.setPointerCapture?.(e.pointerId);
+    };
+    const move = (e: PointerEvent) => {
+      if (!dragging || fieldTimeState.rangeEnd === fieldTimeState.rangeStart) return;
+      const dx = e.clientX - lastX;
+      lastX = e.clientX;
+      const vw = window.innerWidth / 100;
+      const years = dx / (useTuning.getState().fieldVwPerYear * vw);
+      // drag right = travel earlier (content moves with the finger), matching
+      // the down/left = earlier grammar used everywhere else
+      fieldTimeState.target = Math.min(
+        fieldTimeState.rangeEnd,
+        Math.max(fieldTimeState.rangeStart, fieldTimeState.target - years)
+      );
+      fieldTimeState.lastInputMs = performance.now();
+    };
+    const up = (e: PointerEvent) => {
+      dragging = false;
+      surface.releasePointerCapture?.(e.pointerId);
+    };
+    surface.addEventListener('pointerdown', down);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    return () => {
+      surface.removeEventListener('pointerdown', down);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+  }, []);
+
+  const stepYear = (dir: -1 | 1) => {
+    const s = useExperience.getState();
+    if (s.locked) return;
+    fieldTimeState.target = Math.min(
+      fieldTimeState.rangeEnd,
+      Math.max(fieldTimeState.rangeStart, Math.round(fieldTimeState.target) + dir)
+    );
+    fieldTimeState.lastInputMs = performance.now();
+  };
 
   const enterItem = (item: HistoricalFieldItemVM, el: HTMLElement) => {
     const s = useExperience.getState();
@@ -191,8 +283,10 @@ export function HistoricalFieldPage({ frame }: { frame: HistoricalFieldFrame }) 
         data-testid={`field-item-${p.slug}`}
         data-item-id={p.id}
         data-mid-year={p.midYear}
+        data-lane={p.lane}
         data-kind={item.kind}
         data-opens-world={item.topicWorldSlug ? 'true' : undefined}
+        tabIndex={-1}
         style={{
           left: `${p.xVw.toFixed(2)}vw`,
           top: `${p.yVh.toFixed(2)}vh`,
@@ -211,7 +305,7 @@ export function HistoricalFieldPage({ frame }: { frame: HistoricalFieldFrame }) 
             aspectRatio={media.aspectRatio}
           />
         )}
-        <span className="hf-item-label">
+        <span className="hf-item-label" aria-hidden>
           <span className="hf-item-kind">{item.kind}</span>
           <span className="hf-item-title">{item.title}</span>
           <span className="hf-item-date">{item.dateLabel}</span>
@@ -232,10 +326,15 @@ export function HistoricalFieldPage({ frame }: { frame: HistoricalFieldFrame }) 
       className="hf-root"
       data-testid="historical-field"
       data-range={`${frame.rangeStart}-${frame.rangeEnd}`}
+      data-narrow={narrow ? 'true' : undefined}
     >
       {status === 'error' && (
         <p className="hf-note hf-error">This range is not available yet.</p>
       )}
+
+      {/* dedicated drag/hit surface (behind the plates): captures background
+          pointer drags without stealing plate clicks */}
+      <div className="hf-drag" aria-hidden />
 
       {/* the temporal collage, in three parallax depth layers */}
       <div className="hf-field" aria-label={`Historical field, ${frame.title}`}>
@@ -275,6 +374,28 @@ export function HistoricalFieldPage({ frame }: { frame: HistoricalFieldFrame }) 
           {Math.round(frame.restore.time)}
         </span>
       </footer>
+
+      {/* explicit stepping — touch / narrow / keyboard-light safe */}
+      <div className="hf-nav">
+        <button
+          className="hf-step"
+          data-testid="field-prev"
+          aria-label="Travel earlier"
+          disabled={locked}
+          onClick={() => stepYear(-1)}
+        >
+          ←
+        </button>
+        <button
+          className="hf-step"
+          data-testid="field-next"
+          aria-label="Travel later"
+          disabled={locked}
+          onClick={() => stepYear(1)}
+        >
+          →
+        </button>
+      </div>
 
       <p className="hf-note">
         Provisional field — placeholder plates and unverified records; nothing
