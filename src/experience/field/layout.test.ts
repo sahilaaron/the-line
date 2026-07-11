@@ -158,3 +158,49 @@ describe('temporal collage layout', () => {
     expect(far.interactive).toBe(false);
   });
 });
+
+describe('field density across the 1760–1780 range (issue #16 content)', () => {
+  const layout = computeFieldLayout(FIELD_1760_1780.items, CFG);
+
+  it('carries ~40–60 records', () => {
+    expect(FIELD_1760_1780.items.length).toBeGreaterThanOrEqual(40);
+    expect(FIELD_1760_1780.items.length).toBeLessThanOrEqual(60);
+  });
+
+  /** plates whose representative year is within `r` years of `y`. */
+  const band = (y: number, r: number) =>
+    layout.filter((p) => Math.abs(p.midYear - y) <= r).length;
+
+  it('keeps every year mounted-dense (no empty windows anywhere in range)', () => {
+    for (let y = CFG.rangeStart; y <= CFG.rangeEnd; y++) {
+      // the actual mounted window (visible radius + overscan) is never sparse
+      expect(visiblePlacements(layout, y, 8, 3).length).toBeGreaterThanOrEqual(12);
+    }
+  });
+
+  it('shows a healthy near-band (~8–18) at most positions, incl. the range edges', () => {
+    for (let y = CFG.rangeStart; y <= CFG.rangeEnd; y++) {
+      // the interactive/near band (fieldActiveRadiusYears≈2.4) — the plates
+      // a visitor actually reads — stays populated even at 1760 and 1780,
+      // which was the pre-content defect (sparse edges).
+      expect(band(y, 2.4)).toBeGreaterThanOrEqual(6);
+    }
+    // the core of the range is denser still
+    for (let y = 1764; y <= 1774; y++) {
+      expect(band(y, 2.4)).toBeGreaterThanOrEqual(10);
+    }
+  });
+
+  it('spreads records across kinds, themes and depth layers', () => {
+    const kinds = new Set(FIELD_1760_1780.items.map((i) => i.kind));
+    // all seven kinds represented
+    expect(kinds.size).toBeGreaterThanOrEqual(7);
+    const depths = new Set(layout.map((p) => p.depth));
+    // every parallax layer is used
+    expect(depths).toEqual(new Set([0, 1, 2]));
+    // aspect-ratio variety (portrait through panoramic)
+    const ars = FIELD_1760_1780.items.map((i) => i.media[0].aspectRatio);
+    expect(Math.min(...ars)).toBeLessThan(0.7);
+    expect(Math.max(...ars)).toBeGreaterThan(2.0);
+  });
+});
