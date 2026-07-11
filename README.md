@@ -28,6 +28,28 @@ broadsheet. The YoL is a nested local timeline: context years, the year
 overview, dated developments and a closing point, read from the database
 (see below) with the TypeScript registry as an isolated fallback.
 
+### 1769 — the Historical Field & recursive Topic Worlds
+
+At **1769** the descent opens a continuous **1760–1780 Historical Field**
+instead of the YoL: a deterministic temporal *collage* of ~60 provisional
+records hanging in depth above a fixed local marker (wheel / ←→ / drag /
+the `field-prev`·`field-next` controls travel the years; down/left =
+earlier, as everywhere). Selecting a subject makes it **expand into its
+own Topic World** — a horizontal run of editorial chapters — and a topic
+can open a further topic to arbitrary depth
+(Steam Engine → James Watt → University of Glasgow → Scottish
+Enlightenment), all through one generic **world stack** with a breadcrumb,
+Back, and EXACT restoration at every level. It is one persistent Canvas and
+overlay worlds — no route change, no remount. **1969** keeps its
+database-backed YoL untouched. Everything in the field/worlds is
+clearly-provisional placeholder material (seeded CSS plates, no archival
+media, no invented dates/quotes/sources).
+
+Debug-mode URL tuning: append `?debug=1&tune.<key>=<n>` (e.g.
+`?debug=1&tune.worldTransitionSec=0.35&tune.fieldVisibleRadiusYears=6`) to
+pin any `config.ts` value live — used for visual iteration and to fit long
+journeys into CI/sandbox budgets.
+
 ## Checks
 
 ```bash

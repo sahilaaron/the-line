@@ -873,3 +873,74 @@ overflow at the lowest lane; far plates remain in tab order; no field
 touch drag yet; browser-history integration deliberately out; transition
 plate could zoom the outgoing world beneath (optional polish). Real-GPU
 motion review outstanding for field parallax + transition timing.
+
+### Cycle 7 construction (Opus, 2026-07-11) — completion on Fable's kernel
+
+Built ON the kernel above (not modified): content, visual treatment,
+narrow/touch, accessibility, reduced-motion polish, and the full test +
+evidence pass. Fable's architectural findings above are unchanged.
+
+- **Field content** (`src/data/worlds/prototype-content.ts`): 60 records
+  across 1760–1780 (14 original ids retained so the kernel/layout tests
+  stay valid; ~46 added). Mixed kinds (all 7), aspect ratios 0.6–2.3
+  (portrait/narrow-doc/square/object/landscape/panoramic), prominence
+  32–95, several `endYear` ranges, four `composition` overrides to prove
+  editorial control. Named subjects only where safely established or
+  required by the chain; everything else is an explicit "(provisional
+  record)" — no invented dates, quotes, sources or causal claims. Density
+  (unit-checked in `field/layout.test.ts`): the near band (±2.4y) holds
+  8–19 plates across the core and 6–8 at the very edges — the sparse
+  1760–63 / 1777–80 edges are gone. Mounted window (±8y+overscan) 21–52.
+- **Topic worlds**: 6 / 6 / 5 / 6 chapters (steam / watt / glasgow /
+  enlightenment). The single onward doorway per world is kept at chapter
+  index 1 so the protected chain spec (ArrowRight → chapter 1 → doorway)
+  stays green; Enlightenment is terminal. Copy stays short + provisional.
+- **PlaceholderPlate**: seeded treatment variants (border construction,
+  hatch angle/density, vignette, corner registration marks, internal
+  geometry orbit/axis/grid) — all derived from `hash32(seed:…)` ONLY, so
+  the collage reads varied while staying deterministic (transition +
+  restoration depend on it).
+- **Accessibility**: the per-frame emphasis loop now writes `tabIndex`
+  (0 near / -1 far) so distant, non-interactive field plates leave the
+  tab order; decorative `.hf-item-label` is `aria-hidden` (the button's
+  `aria-label` already announces title/kind/date/opens-world). Topic
+  doorways are `tabIndex -1` unless their chapter is active. Verified by
+  `historical-field.spec.ts` (near=0 / far=-1) and `topic-worlds.spec.ts`.
+- **Narrow (≤900/≤560px)**: a matchMedia-derived `narrow` flag (NOT
+  per-frame) thins the mounted collage (tighter radius + front layers)
+  while KEEPING the temporal arrangement (not a card list). Added
+  `field-prev`/`field-next` controls (disabled while locked) and pointer/
+  touch drag on a dedicated `.hf-drag` surface (px→years via
+  `fieldVwPerYear`). GOTCHA fixed: `.hf-root` is `pointer-events:none`, so
+  the nav had to opt back in (`.hf-nav{pointer-events:auto}`) or the drag
+  surface swallowed its clicks. At ≤560px the redundant Return button is
+  hidden (breadcrumb root crumb returns to the Line) so it can't collide
+  with the breadcrumb; page-level horizontal overflow is guarded.
+- **Lane-3 hover-label overflow (Fable defect) fixed**: bottom-lane plates
+  open their label ABOVE the plate (`[data-lane='3']`).
+- **Topic atmosphere**: a soft accent glow drifts with `data-chapter`
+  (chapter-to-chapter shift); `motion-*` classes vary doorway easing.
+- **Reduced motion**: verified the single kernel path (no 2nd renderer) —
+  jumps instead of easing, no parallax/scale/pulse; new
+  `reduced-motion-field.spec.ts` proves the whole field→topic→return chain
+  restores under `reducedMotion:'reduce'`.
+- **Real-GPU note**: judged only under sandbox SwiftShader (software) — the
+  collage reads rich but slightly busy at default falloffs; a real-GPU
+  pass on parallax/falloff and the optional outgoing-world zoom in
+  `WorldTransition` remains a worthwhile follow-up (deferred, not blocking).
+
+#### Verification (Opus, sandbox — software rendering)
+lint 0, tsc 0, production build green, 79 non-db unit tests + 11 field
+layout + 9 world-stack green. db unit suites pass per-file (import/export
+6/6 at a 25–30s timeout — they only trip the default 5s under sandbox CPU
+load, a speed limit, not a defect; green in CI). Playwright: ALL specs
+green per-file under `--workers=1` — historical-chain (2, kernel intact),
+historical-field (8), topic-worlds (7), reduced-motion-field (1),
+local-timeline (2), synthetic-exclusion (2), reduced-motion (1),
+fallback (1), narrow (1), parent-line (5). Evidence (11 screenshots + a
+descent→depth-4→return recording) captured, NOT committed.
+
+#### Sandbox limitations (environment, not code)
+The 45s/command cap means `npm run test:e2e` and the full `npm run db:test`
+cannot run as ONE command here; both are green run per-file/with an
+adequate per-test timeout. Real-GPU motion review still outstanding.
