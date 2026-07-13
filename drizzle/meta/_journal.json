@@ -22,6 +22,13 @@
       "when": 1783970187847,
       "tag": "0002_research_staging_crm",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1783975210705,
+      "tag": "0003_cycle8a_integrity_constraints",
+      "breakpoints": true
     }
   ]
 }

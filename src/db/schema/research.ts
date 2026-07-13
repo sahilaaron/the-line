@@ -21,6 +21,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import {
   humanDecisionEnum,
@@ -101,6 +102,12 @@ export const researchJobs = pgTable(
     index('research_jobs_queue_order_idx').on(t.status, t.priority, t.sequence),
     index('research_jobs_run_idx').on(t.claimedByRunId),
     index('research_jobs_dedupe_idx').on(t.dedupeKey),
+    // At most ONE active job per dedupe key: blocks duplicate manual/frontier
+    // captures (incl. concurrent) at the DB level. Terminal jobs are excluded
+    // so a topic can be re-researched later.
+    uniqueIndex('research_jobs_active_dedupe_unique')
+      .on(t.dedupeKey)
+      .where(sql`status in ('queued','claimed','researching','submitted')`),
     check('research_jobs_attempts_nonneg', sql`${t.attemptCount} >= 0`),
   ],
 );
@@ -228,11 +235,17 @@ export const packageDecisions = pgTable(
     mergeTargetEntityId: text('merge_target_entity_id').references(() => entities.id, {
       onDelete: 'set null',
     }),
-    heldItemRefs: jsonb('held_item_refs').$type<string[]>(),
+    /** {section, localRef} pairs held/excluded in approve_with_holds (refs are
+     * only unique within a section). Column name kept for migration stability. */
+    heldItems: jsonb('held_item_refs').$type<{ section: string; localRef: string }[]>(),
     decisionSnapshot: jsonb('decision_snapshot').$type<Record<string, unknown>>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('package_decisions_pkg_idx').on(t.packageId)],
+  (t) => [
+    index('package_decisions_pkg_idx').on(t.packageId),
+    // Exactly ONE final human decision per package.
+    unique('package_decisions_pkg_unique').on(t.packageId),
+  ],
 );
 
 export type ResearchRun = typeof researchRuns.$inferSelect;

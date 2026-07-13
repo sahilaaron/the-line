@@ -26,6 +26,11 @@ function relationshipIdentityWhere(input: NewRelationship): SQL | undefined {
 }
 
 export async function addRelationship(db: Db, input: NewRelationship): Promise<AddRelationshipResult> {
+  // A relationship must carry a legacy enum type OR a registry typeKey (also a
+  // DB CHECK; guarded here so callers get a clear error, not a constraint dump).
+  if (input.type == null && input.typeKey == null) {
+    throw new Error('a relationship requires a `type` (builtin enum) or a `typeKey` (registry)');
+  }
   const existing = await db.query.relationships.findFirst({
     where: relationshipIdentityWhere(input),
   });

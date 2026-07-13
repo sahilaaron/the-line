@@ -247,7 +247,7 @@ export const researchPackageStatusEnum = pgEnum('research_package_status', [
   'approved',
   'approved_with_holds',
   'returned',
-  'merged',
+  'marked_duplicate',
   'rejected',
   'promoted',
 ]);
@@ -297,7 +297,7 @@ export const humanDecisionEnum = pgEnum('human_package_decision', [
   'approve',
   'approve_with_holds',
   'return',
-  'merge',
+  'mark_duplicate',
   'reject',
 ]);
 

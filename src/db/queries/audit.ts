@@ -188,9 +188,36 @@ export async function runIntegrityAudit(db: Db): Promise<AuditReport> {
     }
   }
 
-  // --- cycles in expected-acyclic relationship types ---
-  for (const type of ACYCLIC_EXPECTED_RELATIONSHIP_TYPES) {
-    const edges = allRelationships.filter((r) => r.type === type);
+  // --- Cycle 8A: relationship registry integrity (load once) ---
+  const registry = await db.query.relationshipTypeRegistry.findMany();
+  const registryKeys = new Set(registry.map((r) => r.key));
+  const acyclicKeys = new Set<string>([
+    ...ACYCLIC_EXPECTED_RELATIONSHIP_TYPES,
+    ...registry.filter((r) => r.isAcyclic).map((r) => r.key),
+  ]);
+  const relTypeOf = (r: (typeof allRelationships)[number]): string | null => r.typeKey ?? r.type ?? null;
+
+  // Every relationship must carry a type (enum) or a registry typeKey.
+  for (const r of allRelationships) {
+    if (r.type == null && r.typeKey == null) {
+      errors.push({
+        code: 'relationship_missing_type',
+        message: `relationship ${r.id} has neither a type nor a typeKey`,
+        subjectId: r.id,
+      });
+    }
+    if (r.typeKey && !registryKeys.has(r.typeKey)) {
+      errors.push({
+        code: 'unknown_relationship_type_key',
+        message: `relationship ${r.id} uses unregistered type key "${r.typeKey}"`,
+        subjectId: r.id,
+      });
+    }
+  }
+
+  // --- cycles in expected-acyclic relationship types (registry-driven) ---
+  for (const type of acyclicKeys) {
+    const edges = allRelationships.filter((r) => relTypeOf(r) === type);
     const adjacency = new Map<string, string[]>();
     for (const e of edges) {
       if (!adjacency.has(e.sourceEntityId)) adjacency.set(e.sourceEntityId, []);
@@ -229,20 +256,6 @@ export async function runIntegrityAudit(db: Db): Promise<AuditReport> {
     }
   }
 
-  // --- Cycle 8A: relationship typeKey must resolve to a registered type ---
-  const registry = await db.query.relationshipTypeRegistry.findMany();
-  const registryKeys = new Set(registry.map((r) => r.key));
-  const acyclicKeys = new Set(registry.filter((r) => r.isAcyclic).map((r) => r.key));
-  for (const r of allRelationships) {
-    if (r.typeKey && !registryKeys.has(r.typeKey)) {
-      errors.push({
-        code: 'unknown_relationship_type_key',
-        message: `relationship ${r.id} uses unregistered type key "${r.typeKey}"`,
-        subjectId: r.id,
-      });
-    }
-  }
-  void acyclicKeys; // registry-driven acyclic policy is a superset of the constant list above
 
   // --- Cycle 8A: a verified/corroborated claim must be a fact/interpretation,
   // never an inference/forecast masquerading as verified truth ---

@@ -69,6 +69,10 @@ export const relationships = pgTable(
       t.typeKey,
     ),
     check('relationships_no_self_link', sql`${t.sourceEntityId} <> ${t.targetEntityId}`),
+    check(
+      'relationships_type_or_typekey',
+      sql`${t.type} IS NOT NULL OR ${t.typeKey} IS NOT NULL`,
+    ),
     check('relationships_strength_range', sql`${t.strength} >= 0 AND ${t.strength} <= 100`),
     check('relationships_confidence_range', sql`${t.confidence} >= 0 AND ${t.confidence} <= 100`),
   ],
