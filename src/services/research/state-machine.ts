@@ -23,7 +23,7 @@ export const RUN_TRANSITIONS: Record<RunStatus, RunStatus[]> = {
 
 export const JOB_TRANSITIONS: Record<JobStatus, JobStatus[]> = {
   queued: ['claimed', 'cancelled'],
-  claimed: ['researching', 'queued', 'failed', 'cancelled'], // -> queued = lease recovery / release
+  claimed: ['researching', 'submitted', 'queued', 'failed', 'cancelled'], // submit may skip researching; -> queued = lease recovery
   researching: ['submitted', 'queued', 'failed', 'cancelled'],
   submitted: ['completed', 'returned', 'failed'],
   returned: ['queued', 'cancelled'],

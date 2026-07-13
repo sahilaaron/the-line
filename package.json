@@ -22,7 +22,9 @@
     "db:benchmark": "tsx src/scripts/benchmark.ts",
     "db:audit": "tsx src/scripts/audit.ts",
     "db:export": "tsx src/scripts/export.ts",
-    "db:import": "tsx src/scripts/import.ts"
+    "db:import": "tsx src/scripts/import.ts",
+    "research:agent": "tsx src/scripts/research-agent.ts",
+    "db:seed:research": "tsx src/scripts/seed-research-demo.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.3.16",
