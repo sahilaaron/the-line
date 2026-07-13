@@ -122,16 +122,16 @@ by default) so the reviewer sees it flagged. QA never promotes.
 ## Human decision (final, package-level)
 
 ```jsonc
-{ "decision": "approve_with_holds",         // approve | approve_with_holds | return | merge | reject
+{ "decision": "approve_with_holds",         // approve | approve_with_holds | return | mark_duplicate | reject
   "reviewer": "Sahil",
-  "heldItemRefs": ["rel-newcomen"],          // for approve_with_holds
+  "heldItems": [{ "section": "relationship", "localRef": "rel-newcomen" }],  // for approve_with_holds
   "instructions": "…",                       // required for return
   "reason": "…",                             // required for reject
-  "mergeTargetSlug": "…" }                    // required for merge
+  "duplicateOfSlug": "…" }                    // required for mark_duplicate (records a duplicate; NOT a deep merge)
 ```
 
 The per-item `decision` set here is **authoritative** for promotion:
 `approve` accepts every item (reviewer overrides QA holds);
-`approve_with_holds` accepts all except the reviewer's holds ∪ QA-held items.
+`approve_with_holds` accepts all except the reviewer's holds (composite {section, localRef}) plus QA-held items. `mark_duplicate` records that the subject duplicates an existing canonical entity — it does NOT deep-merge/reparent data (a later dedicated cycle).
 Held/rejected items stay in staging with their evidence — never deleted.
 Approve/approve_with_holds trigger the atomic transactional promotion.

@@ -34,7 +34,7 @@ graph**; it never publishes anything to the public experience.
 6. **A separate QA session** reads the package and submits QA:
    `npm run research:agent -- qa --package <pkgId> --file qa.json`.
 7. **Sahil reviews** the package in `/crm/packages/<id>` and
-   approves / approves-with-holds / returns / merges / rejects.
+   approves / approves-with-holds / returns / marks-duplicate / rejects.
 
 `npm run research:agent -- status` prints queue counts and packages awaiting
 review at any time.
@@ -63,7 +63,7 @@ insertion order). Fully unit-tested in `kernel-pure.test.ts`.
   claims immediately.
 - **Package:** `submitted → qa_pending/qa_complete → in_review →
   approved / approved_with_holds → promoted`; or `in_review →
-  returned / merged / rejected`.
+  returned / marked_duplicate / rejected`.
 
 ## Stop semantics (safe)
 
@@ -97,5 +97,5 @@ require human resolution.
 - **QA session:** READ a package, WRITE `qa_results` + `qa_flags` (via `qa`).
   May not promote.
 - **Human (Sahil) in the CRM:** the only actor who promotes (approve /
-  approve_with_holds) into the private canonical graph, or returns / merges /
-  rejects. Publishing to `yol_*` is a separate, later step outside this cycle.
+  approve_with_holds) into the private canonical graph, or returns /
+  marks-duplicate / rejects. Publishing to `yol_*` is a separate, later step outside this cycle.

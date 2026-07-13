@@ -253,3 +253,17 @@ per-item), `qa_results`, `qa_flags`, `package_decisions`.
 - `unknown_relationship_type_key` — a `typeKey` not in the registry (error);
 - `assertion_class_violation` — a `verified`/`corroborated` claim whose
   assertion class is `inference`/`forecast` (error).
+
+### Migration 0003 — integrity constraints (Cycle 8A correction pass)
+
+- `relationships` CHECK: `type IS NOT NULL OR type_key IS NOT NULL` (no
+  untyped relationships); repository + validator guards mirror it; audit adds
+  `relationship_missing_type`.
+- `research_jobs`: partial UNIQUE index on `dedupe_key` for active statuses
+  (`queued/claimed/researching/submitted`) — no duplicate active job per topic,
+  even concurrently. Manual capture goes through `captureManualJob`.
+- `package_decisions`: UNIQUE(`package_id`) — exactly one final decision per
+  package (backs the replay/conflict guard in `decidePackage`).
+- Human decision value `merge`→`mark_duplicate` and package status
+  `merged`→`marked_duplicate`: the shallow operation only RECORDS a duplicate
+  (it does not deep-merge/reparent), renamed so it cannot be mistaken for one.

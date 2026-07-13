@@ -947,7 +947,7 @@ adequate per-test timeout. Real-GPU motion review still outstanding.
 
 ---
 
-## Cycle 8A — Research staging pipeline & CRM kernel (issue #5, Fable)
+## Cycle 8A — Research staging pipeline & CRM kernel (issue #5, Opus)
 
 Architecture/kernel cycle. Built the durable data model, state machines,
 service boundaries and a minimal end-to-end CRM proof that turns candidate
@@ -1009,3 +1009,43 @@ research into the PRIVATE canonical graph. Companion docs:
 Merge promotion is shallow; return-correction loop is queued but not UI-proven
 end to end; random discovery is a deterministic/injected stub; no auth
 (local/internal only); completeness/freshness heuristics are coarse.
+
+### Cycle 8A correction pass (Opus, post-Codex-audit)
+
+Codex audited the kernel bundle and found lifecycle/integrity invariants that
+were untested/unenforced. Repaired without expanding scope (migration 0003 +
+service hardening):
+
+- **Atomic, replay-safe approval+promotion.** `decidePackage` now validates
+  transitions against the package's ACTUAL status, enforces exactly one final
+  decision (unique constraint + guard), treats an identical replay as a
+  harmless no-op (returning the existing result / retrying a failed promotion),
+  and rejects a conflicting second decision. Promotion was refactored to
+  `promoteWithinTx` and runs INSIDE the decision transaction, so the decision,
+  per-item decisions, canonical writes, frontier jobs and final `promoted`
+  status commit or roll back together. A promotion failure leaves the package
+  reviewable and safely retryable with no partial writes (proven by tests).
+- **Composite held-item identity.** Holds are `{section, localRef}` (refs are
+  only unique within a section) across validation, persistence, services, CRM
+  and the contract — identical refs in two sections hold independently.
+- **Relationship typing enforced.** DB CHECK (`type` or `type_key`), repository
+  + Zod guards, and an audit `relationship_missing_type` check. Audit cycle
+  detection now uses registry `isAcyclic` types (not only the legacy constant);
+  promotion enforces the registry's allowed endpoint kinds and collapses
+  reversed duplicates for symmetric types.
+- **Manual capture** goes through `captureManualJob`: resolves canonical first
+  (skips a sufficiently-complete entity), prevents duplicate active jobs
+  (partial unique index + race-safe catch), returns queued/already_queued/
+  already_canonical.
+- **No silent drops.** Promotion FAILS + rolls back on an accepted item it
+  cannot promote (unresolved ref, unknown/forecast relationship type, missing
+  source, disallowed endpoint kind); a dependency on a deliberately-excluded
+  synthetic item cascades as a counted exclusion, not an error.
+- **QA flag targets validated** against real package items; package-level flags
+  preserved.
+- Shallow `merge` renamed to `mark_duplicate` (records a duplicate only).
+- Hygiene: removed a stray `.deb` from git, README EOL, delivery attribution.
+
+New tests: `corrections.test.ts` (12) + relationship-typing pure tests cover
+every repaired invariant; the Steam Engine proof and all prior suites remain
+green.

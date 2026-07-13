@@ -1,7 +1,7 @@
 # GOAL — Build Cycle 8A: Research Staging Pipeline & CRM kernel (ACTIVE)
 
 Tracked as issue #5 on branch `issue-5/research-staging-crm`. This is an
-architecture/kernel cycle for Fable: build the durable data model, state
+architecture/kernel cycle (Opus): build the durable data model, state
 machines, service boundaries and a minimal but genuinely usable end-to-end
 CRM proof that turns candidate research into the **private canonical graph**.
 Cycles 6 (PR #15) and 7 (PR #17) are complete and untouched by this cycle.
@@ -23,7 +23,7 @@ sourced, reviewed history while keeping three concerns strictly separated:
 Acceptance into the canonical graph and selection for public presentation are
 **separate decisions**. Promotion never publishes.
 
-## Delivered (Fable — the kernel)
+## Delivered (Opus — the kernel)
 
 - **Schema (migration 0002, forward-only):** entity identity satellites
   (aliases, external ids, controlled classifications resolving the kind

@@ -113,4 +113,3 @@ npm run research:agent -- claim --run <runId>    # claim the next job
 
 The CRM is local/internal and has no authentication (a documented Cycle 8A
 non-goal); do not expose it publicly without an auth layer.
-

@@ -1,8 +1,8 @@
 # Backend / CRM Handover — Cycle 8A kernel → Opus construction
 
-**For: Opus. From: Fable. Issue: #5. Branch: `issue-5/research-staging-crm`.**
+**For: the next construction cycle. From: the Cycle 8A kernel build (Opus). Issue: #5. Branch: `issue-5/research-staging-crm`.**
 
-Fable built and PROVED the research-staging KERNEL: the durable data model,
+Cycle 8A built and PROVED the research-staging KERNEL: the durable data model,
 state machines, service boundaries and a minimal end-to-end CRM proof. Your
 cycle is construction on top of it. Read `docs/research-operations.md` and
 `docs/research-package-contract.md` first, then this.
@@ -61,11 +61,13 @@ cycle is construction on top of it. Read `docs/research-operations.md` and
 
 Prioritised. None of it should weaken the kernel.
 
-1. **Merge promotion.** Today `merge` records the decision and points the
-   package at the target entity but does not fold the package's other accepted
-   items into the target. Implement a real merge that reparents accepted time
-   associations/relationships/claims/sources onto the merge target, sets
-   `mergedIntoId`/`supersededById`, and stays atomic + idempotent.
+1. **Deep merge / entity reparenting.** The human decision `mark_duplicate`
+   deliberately only RECORDS that the subject duplicates an existing canonical
+   entity (it points the package at the target and does NOT reparent data). A
+   later dedicated cycle should implement a real deep merge that reparents
+   accepted time associations/relationships/claims/sources onto the target and
+   sets `mergedIntoId`/`supersededById`, atomically + idempotently. Do not
+   expose it as "merge" until it actually reparents.
 2. **Return-correction loop.** A `return` queues a `returned_correction` job;
    wire the re-research → re-submit → re-review path in the UI and prove it
    end to end.
@@ -92,7 +94,7 @@ Prioritised. None of it should weaken the kernel.
 
 - **No auth.** The CRM is local/internal only; not production-secure. Do not
   ship it publicly without an auth layer.
-- **Merge is shallow** (see #1 above).
+- **`mark_duplicate` does not reparent data** (records the duplicate only; deep merge is a later cycle — see #1).
 - **Random discovery is a stub** (deterministic/injected only).
 - **Completeness heuristic is coarse** (≥2 claims AND ≥1 time association →
   `canonical_complete`). Tune in `config.ts` as real data arrives.
