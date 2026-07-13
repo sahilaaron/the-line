@@ -944,3 +944,68 @@ descent→depth-4→return recording) captured, NOT committed.
 The 45s/command cap means `npm run test:e2e` and the full `npm run db:test`
 cannot run as ONE command here; both are green run per-file/with an
 adequate per-test timeout. Real-GPU motion review still outstanding.
+
+---
+
+## Cycle 8A — Research staging pipeline & CRM kernel (issue #5, Fable)
+
+Architecture/kernel cycle. Built the durable data model, state machines,
+service boundaries and a minimal end-to-end CRM proof that turns candidate
+research into the PRIVATE canonical graph. Companion docs:
+`docs/research-operations.md`, `docs/research-package-contract.md`,
+`instruction-set/backend-crm-opus-handover.md`.
+
+### Architecture decisions
+
+- **Kind drift resolved deliberately.** `entities.kind` stays the small
+  renderer enum; a controlled `entity_classifications` vocabulary
+  (`CLASSIFICATION_VOCABULARY`) carries the richer meaning. Two explicit
+  reconciliations: `idea→concept`, `discovery→event`. New classifications need
+  no code migration.
+- **Relationship-type registry, not enum growth.** `relationship_type_registry`
+  (inverse wording, directionality, allowed kinds, cycle policy) with a
+  `relationships.typeKey` bridge. The legacy `type` enum was relaxed to
+  nullable and backfilled; 13 builtins seeded in-migration. New registry-only
+  types store `typeKey` with `type=null`; read code coalesces `typeKey ?? type`.
+- **Assertion classes** (`recorded_fact`/`interpretation`/`inference`/
+  `forecast`) as a small enum column on claims + relationships. The validator
+  and `db:audit` guarantee inference/forecast can never be a verified fact.
+  Smallest durable representation after inspecting the claims schema.
+- **Typed multi-role time** via `entity_time_associations` (kept
+  `primaryPeriodId` for renderer compat). Never JS `Date`.
+- **Staging = validated JSON payloads + immutable envelope; canon = normalized.**
+  Deliberate: staging is transient and reviewed per-section, so
+  `research_package_items.payload` (JSON) + `research_packages.envelope`
+  (immutable snapshot, `submissionHash` for idempotency) is the right cost.
+  Canonical truth stays fully normalized.
+- **Promotion is the ONE atomic path** staging→canon: match by external id
+  then controlled identity, never fuzzy-merge, create private draft stubs for
+  new neighbours, enqueue frontier jobs, preserve provenance, exclude
+  synthetic/held items, never write `yol_*`, idempotent via a status guard +
+  unique constraints, rolls back entirely on any error.
+
+### Verification (sandbox, SwiftShader/PGlite)
+
+- lint 0 errors, `tsc --noEmit` 0 errors.
+- Unit/integration: **193 tests pass, 0 fail** across schema/repositories (14),
+  validation (23), queries (audit+yol 13, yol-read-model 8, traversal in the
+  experience batch), experience+data regressions (87 incl. world-stack/field/
+  YoL), seed+pgbare (11), import-export (6), and the new research suites:
+  `kernel-pure` (10), `kernel-db` (11), `steam-engine.integration` (10). The 3
+  previously-flaky PGlite timeouts pass with `--testTimeout=30000` (perf, not
+  logic).
+- `db:check` clean, `db:validate` 17/17, `db:audit` 0 errors (1 pre-existing
+  unreachable-entities warning), `db:seed`/`db:seed:research` OK.
+- `next build`: compiled + type-checked + all 4 pages generated ✓ (final
+  build-trace step and the full Playwright run exceed the 45s sandbox shell
+  cap; both are CI-ready). CRM proven at runtime via a live-server smoke: all
+  `/crm` pages HTTP 200 against the seeded+promoted DB; the canonical record
+  shows `canonical_incomplete` / `private — not published` / the accepted
+  `improved_by` relationship / provenance, and the held `replaced→Newcomen`
+  relationship is absent.
+
+### Known limitations (see Opus handover for the full list)
+
+Merge promotion is shallow; return-correction loop is queued but not UI-proven
+end to end; random discovery is a deterministic/injected stub; no auth
+(local/internal only); completeness/freshness heuristics are coarse.

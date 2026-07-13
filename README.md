@@ -94,3 +94,23 @@ npm run db:audit          # integrity audit (non-zero exit on errors)
 npm run db:export         # export full DB (or one YoL closure) to JSON
 npm run db:import         # transactional import from a JSON export
 ```
+
+## Research CRM (Cycle 8A)
+
+An internal, local-only research pipeline turns sourced candidate history into
+the **private canonical knowledge graph** (separate from public presentation).
+Open `/crm` for the dashboard, queue/runs, package review and canonical-record
+proof. The daily flow, queue order and external-agent commands are in
+`docs/research-operations.md`; the package/QA/decision contract is in
+`docs/research-package-contract.md`.
+
+```bash
+npm run db:migrate && npm run db:seed:research   # load the Steam Engine demo
+npm run research:agent -- status                 # queue counts
+npm run research:agent -- create-run --limit 5   # start a run
+npm run research:agent -- claim --run <runId>    # claim the next job
+```
+
+The CRM is local/internal and has no authentication (a documented Cycle 8A
+non-goal); do not expose it publicly without an auth layer.
+

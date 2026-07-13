@@ -87,3 +87,17 @@ Nothing is deleted to hide it — provenance is surfaced, not suppressed.
 Issue #5 stays **BLOCKED** until issue #14 is merged by Sahil. The canonical
 tables, repositories, validators and the read boundary above are the stable
 surface #5 builds on; the staging/promotion mechanism is #5's to design.
+
+---
+
+## Status update (Cycle 8A, issue #5 — DELIVERED)
+
+Issue #5 is no longer blocked (issue #14/PR #15 merged). Cycle 8A built the
+staging design on top of the boundary above and **preserves every constraint
+in it**: the promotion service writes time/entities/relationships/claims/
+sources/media only through the repositories + validators named here, never raw
+SQL, never `yol_*`, never synthetic rows, never a placeholder relabelled as
+reviewed/archival. Candidates stay `isPlaceholder=true` / editorial `draft`/
+`in_review` until a human promotes; promotion is PRIVATE canonical acceptance,
+not publication. See `docs/research-package-contract.md` and
+`docs/research-operations.md`.
