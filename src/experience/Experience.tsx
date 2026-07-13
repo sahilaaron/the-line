@@ -7,14 +7,16 @@ import { MAX_INDEX } from '@/src/data/anchors';
 import { useExperience, useTuning } from './store';
 import {
   descentState,
+  fieldTimeState,
   localTimeState,
+  topicScrollState,
   destinationStyle,
   metricsState,
   motionPref,
   timeState,
 } from './runtime';
 import { applyWheel, stepIndex } from './time';
-import { PALETTE, QUALITY, TUNING_DEFAULTS } from './config';
+import { PALETTE, QUALITY, TUNING_DEFAULTS, type Tuning } from './config';
 import { cssVariables } from './tokens';
 import { LineScene } from './scenes/LineScene';
 import { DescentController } from './scenes/DescentController';
@@ -108,6 +110,8 @@ function SceneRoot() {
 export default function Experience() {
   const mode = useExperience((s) => s.mode);
   const locked = useExperience((s) => s.locked);
+  const worldTop = useExperience((s) => s.worldStack[s.worldStack.length - 1]?.frame.type);
+  const worldDepth = useExperience((s) => Math.max(0, s.worldStack.length - 1));
   const quality = useExperience((s) => s.quality);
   const debug = useMemo(
     () =>
@@ -115,6 +119,25 @@ export default function Experience() {
       new URLSearchParams(window.location.search).get('debug') === '1',
     []
   );
+
+  // development tuning via URL (debug mode only): ?debug=1&tune.<key>=<n>
+  // lets a visual-iteration session or a journey capture pin exact tuning
+  // values without touching code (values land in the same useTuning store
+  // the ?debug=1 panel edits)
+  useEffect(() => {
+    if (!debug) return;
+    const params = new URLSearchParams(window.location.search);
+    const overrides: Record<string, number> = {};
+    params.forEach((value, key) => {
+      if (!key.startsWith('tune.')) return;
+      const name = key.slice(5) as keyof Tuning;
+      const n = Number(value);
+      if (Number.isFinite(n) && name in TUNING_DEFAULTS) overrides[name] = n;
+    });
+    if (Object.keys(overrides).length > 0) {
+      useTuning.getState().set(overrides as Partial<Tuning>);
+    }
+  }, [debug]);
 
   // keep motionPref fresh
   useEffect(() => {
@@ -140,21 +163,49 @@ export default function Experience() {
         timeState.hasScrolled = true;
         return;
       }
-      if (exp.mode === 'yol' && localTimeState.count > 0) {
-        // same temporal grammar as the parent Line: scroll down = earlier
+      if (exp.mode === 'yol') {
+        const top = exp.worldStack[exp.worldStack.length - 1]?.frame;
+        if (!top) return;
         e.preventDefault();
-        const s = useTuning.getState().localScrollSensitivity;
-        localTimeState.target = applyWheel(
-          localTimeState.target,
-          e.deltaY,
-          s,
-          localTimeState.count - 1
-        );
-        localTimeState.lastInputMs = performance.now();
+        const t = useTuning.getState();
+        if (top.type === 'yol' && localTimeState.count > 0) {
+          // same temporal grammar as the parent Line: scroll down = earlier
+          localTimeState.target = applyWheel(
+            localTimeState.target,
+            e.deltaY,
+            t.localScrollSensitivity,
+            localTimeState.count - 1
+          );
+          localTimeState.lastInputMs = performance.now();
+        } else if (top.type === 'historical-field') {
+          // continuous years; down = earlier, exactly like every other axis
+          fieldTimeState.target = Math.min(
+            fieldTimeState.rangeEnd,
+            Math.max(
+              fieldTimeState.rangeStart,
+              fieldTimeState.target - e.deltaY * t.fieldYearsPerWheelPx
+            )
+          );
+          fieldTimeState.lastInputMs = performance.now();
+        } else if (top.type === 'topic' && topicScrollState.count > 0) {
+          // chapters are editorial, not temporal: wheel down = onward
+          topicScrollState.target = Math.min(
+            topicScrollState.count - 1,
+            Math.max(0, topicScrollState.target + e.deltaY * t.topicWheelSensitivity)
+          );
+          topicScrollState.lastInputMs = performance.now();
+        }
       }
     };
     const onKey = (e: KeyboardEvent) => {
       const exp = useExperience.getState();
+      if (e.key === 'Escape' && exp.mode === 'yol') {
+        // one level up the world stack (delegates to the camera return at
+        // depth 1); respects the transition lock internally
+        e.preventDefault();
+        exp.popWorld();
+        return;
+      }
       if (exp.locked) return;
       if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
       const dir = e.key === 'ArrowLeft' ? -1 : 1;
@@ -169,15 +220,32 @@ export default function Experience() {
         timeState.hasScrolled = true;
         return;
       }
-      if (exp.mode === 'yol' && localTimeState.count > 0) {
-        // left = earlier, right = later — one grammar at both depths
+      if (exp.mode === 'yol') {
+        const top = exp.worldStack[exp.worldStack.length - 1]?.frame;
+        if (!top) return;
         e.preventDefault();
-        localTimeState.target = stepIndex(
-          Math.round(localTimeState.target),
-          dir,
-          localTimeState.count - 1
-        );
-        localTimeState.lastInputMs = performance.now();
+        if (top.type === 'yol' && localTimeState.count > 0) {
+          // left = earlier, right = later — one grammar at every depth
+          localTimeState.target = stepIndex(
+            Math.round(localTimeState.target),
+            dir,
+            localTimeState.count - 1
+          );
+          localTimeState.lastInputMs = performance.now();
+        } else if (top.type === 'historical-field') {
+          fieldTimeState.target = Math.min(
+            fieldTimeState.rangeEnd,
+            Math.max(fieldTimeState.rangeStart, Math.round(fieldTimeState.target) + dir)
+          );
+          fieldTimeState.lastInputMs = performance.now();
+        } else if (top.type === 'topic' && topicScrollState.count > 0) {
+          topicScrollState.target = stepIndex(
+            Math.round(topicScrollState.target),
+            dir,
+            topicScrollState.count - 1
+          );
+          topicScrollState.lastInputMs = performance.now();
+        }
       }
     };
     window.addEventListener('wheel', onWheel, { passive: false });
@@ -195,6 +263,8 @@ export default function Experience() {
       className={`experience mode-${mode}`}
       data-mode={mode}
       data-locked={locked ? 'true' : 'false'}
+      data-world={worldTop ?? undefined}
+      data-depth={worldDepth}
       style={themeVars}
     >
       <Canvas

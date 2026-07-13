@@ -38,6 +38,60 @@ export function setLocalTimeline(count: number, initialIndex: number): void {
   localTimeState.lastInputMs = -1e9;
 }
 
+/**
+ * CONTINUOUS HISTORICAL TIME inside a Historical Field, in fractional
+ * years (e.g. 1768.4). Deliberately separate from the YoL point-index
+ * model: the field is a continuum, not a sequence. DOM handlers write
+ * `target`; the field renderer's rAF eases `time` toward it with the
+ * parent Line's snap discipline (round-year snap after idle).
+ */
+export const fieldTimeState = {
+  time: 0,
+  target: 0,
+  lastInputMs: -1e9,
+  rangeStart: 0,
+  rangeEnd: 0,
+};
+
+export function setFieldRange(rangeStart: number, rangeEnd: number, startAt: number): void {
+  fieldTimeState.rangeStart = rangeStart;
+  fieldTimeState.rangeEnd = rangeEnd;
+  fieldTimeState.time = startAt;
+  fieldTimeState.target = startAt;
+  fieldTimeState.lastInputMs = -1e9;
+}
+
+/**
+ * Continuous chapter position inside a Topic World (0..chapterCount-1,
+ * fractional while travelling). Same grammar as every other axis.
+ */
+export const topicScrollState = {
+  pos: 0,
+  target: 0,
+  lastInputMs: -1e9,
+  count: 0,
+};
+
+export function setTopicChapters(count: number, startAt: number): void {
+  topicScrollState.count = count;
+  topicScrollState.pos = startAt;
+  topicScrollState.target = startAt;
+  topicScrollState.lastInputMs = -1e9;
+}
+
+/**
+ * World push/pop shared-element transition, animated by the
+ * WorldTransitionController (overlay-level GSAP; the Canvas never moves
+ * for world→world hops). `progress` runs 0→1 for both directions; the
+ * plate expands from / shrinks to `rect`.
+ */
+export const worldTransitionState = {
+  progress: 0,
+  direction: 'push' as 'push' | 'pop',
+  rect: null as { x: number; y: number; width: number; height: number } | null,
+  seed: null as string | null,
+};
+
 /** Descent/return transition state, animated by GSAP in DescentController. */
 export const descentState = {
   /** 0 = Line View world, 1 = YoL world (scene swap happens at 0.5) */
@@ -141,6 +195,11 @@ export function resetThemeFocus(): void {
 
 /** Reset helper for tests. */
 export function resetRuntime(): void {
+  setFieldRange(0, 0, 0);
+  setTopicChapters(0, 0);
+  worldTransitionState.progress = 0;
+  worldTransitionState.rect = null;
+  worldTransitionState.seed = null;
   localTimeState.pos = 0;
   localTimeState.target = 0;
   localTimeState.lastInputMs = -1e9;

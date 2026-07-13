@@ -98,7 +98,15 @@ export async function descend(page: Page): Promise<void> {
     'false',
     { timeout: 15_000 }
   );
-  await expect(page.getByTestId('yol-page')).toBeVisible({ timeout: 15_000 });
+}
+
+/** Full entry into the 1760–1780 Historical Field (the 1769 destination
+ *  since issue #16; 1969 keeps the YoL renderer). */
+export async function enterField(page: Page): Promise<void> {
+  await goToAnchor(page, '1769');
+  await descend(page);
+  await expect(page.locator('.experience')).toHaveAttribute('data-world', 'historical-field');
+  await expect(page.getByTestId('historical-field')).toBeVisible();
 }
 
 /** Full entry: travel to `label`, descend, and settle the arrival. */
@@ -110,6 +118,7 @@ export async function enterYear(
   await goToAnchor(page, label);
   await descend(page);
   const yol = page.getByTestId('yol-page');
+  await expect(yol).toBeVisible({ timeout: 15_000 });
   await expect(yol).toHaveAttribute('data-year', label);
   if (opts.source) {
     await expect(yol).toHaveAttribute('data-source', opts.source, {

@@ -43,3 +43,54 @@ src/data/            typed placeholder content; YoL registry is FALLBACK only
 ## Quality tiers
 
 `quality: 'high' | 'medium' | 'low'` scales particle counts and DPR cap from `config.ts`. Auto-drop after sustained low FPS is a later-cycle idea (see implementation-notes).
+
+## Cycle 7 — the generic world stack (issue #16)
+
+`yol` mode is now "inside a WORLD STACK", not one fixed year renderer. The
+top frame decides which overlay renderer is front-of-house; there is no
+subject-specific state anywhere and no depth limit.
+
+```
+src/experience/
+  worlds.ts          WorldFrame types (line | yol | historical-field |
+                     topic), StackedFrame (frame + entryRect + entrySeed),
+                     breadcrumbLabels
+  store.ts           worldStack + pushWorld/popWorld/returnToDepth/
+                     updateTopRestore (frames own their restore data);
+                     ONE `locked` flag guards every hop
+  runtime.ts         fieldTimeState (continuous fractional years) +
+                     topicScrollState (chapter axis) + worldTransitionState
+  field/layout.ts    deterministic seeded temporal-collage layout
+                     (pure; computed once per dataset)
+  overlay/worlds/
+    HistoricalFieldPage.tsx  continuous field renderer (per-frame: ease +
+                     4 transforms + emphasis/tabindex writes)
+    TopicWorldPage.tsx       generic horizontal chapter renderer (all kinds)
+    WorldTransition.tsx      shared-element push/pop cover plate
+    WorldChrome.tsx          breadcrumb + Back
+    PlaceholderPlate.tsx     deterministic seeded plates (no assets)
+  overlay/useWorldData.ts    cached async accessor over the data boundary
+src/domain/worlds.ts         renderer-facing view models + data-source iface
+src/data/worlds/             mock-adapter + prototype-content + destinations
+```
+
+Rules added this cycle (all carry forward the invariants above):
+
+- **One Canvas, overlay worlds.** Line↔first-world is the proven camera
+  descent; world↔world hops are overlay-level shared-element transitions —
+  NO Canvas remount, NO route change, at any depth.
+- **Input routing by top-world type** (`Experience.tsx`): wheel/←→ drive
+  `fieldTimeState` (field) or `topicScrollState` (topic) or `localTimeState`
+  (YoL); down/left = earlier everywhere temporal; Escape pops one level.
+  All still behind the single `locked` flag.
+- **Exact restoration is data, not reconstruction.** Renderers write their
+  live position into the top frame before a push; pops read it back;
+  deterministic layout + seeded plates guarantee identical arrangements.
+- **The renderer consumes domain view models only** (`src/domain/worlds.ts`)
+  through `HistoricalWorldDataSource` (mock adapter today; a CRM adapter
+  later — the renderers do not change). See `docs/backend-crm-handoff.md`.
+- **Destinations are data** (`src/data/worlds/destinations.ts`): 1769 →
+  field, 1969 → the untouched DB-backed YoL; new ranges = a new entry.
+- **Per-frame values stay out of React state**; the narrow flag is derived
+  from matchMedia (on change), never per frame; tunables live in
+  `config.ts` + the `?debug=1` panel (also seedable via `?tune.<key>=<n>`).
