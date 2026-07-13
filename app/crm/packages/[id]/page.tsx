@@ -118,13 +118,13 @@ export default async function PackageReview({ params }: { params: Promise<{ id: 
               <label>Correction instructions / rejection reason / merge target slug (as needed)</label>
               <input name="instructions" placeholder="return instructions" />
               <input name="reason" placeholder="rejection reason" style={{ marginTop: '0.35rem' }} />
-              <input name="mergeTargetSlug" placeholder="merge target slug" style={{ marginTop: '0.35rem' }} />
+              <input name="duplicateOfSlug" placeholder="duplicate-of slug (canonical)" style={{ marginTop: '0.35rem' }} />
             </div>
             <div className={s.form}>
               <button className={s.btn} name="decision" value="approve" type="submit">Approve as submitted</button>
               <button data-testid="approve-holds" className={s.btn} name="decision" value="approve_with_holds" type="submit">Approve, hold checked</button>
               <button className={`${s.btn} ${s.ghost}`} name="decision" value="return" type="submit">Return</button>
-              <button className={`${s.btn} ${s.ghost}`} name="decision" value="merge" type="submit">Merge</button>
+              <button className={`${s.btn} ${s.ghost}`} name="decision" value="mark_duplicate" type="submit">Mark duplicate</button>
               <button className={`${s.btn} ${s.danger}`} name="decision" value="reject" type="submit">Reject</button>
             </div>
             <p className={s.muted} style={{ marginTop: '0.6rem' }}>
@@ -152,10 +152,9 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function HoldBox({ it, section, decided }: { it: { localRef: string; held: boolean }; section: string; decided: boolean }) {
-  void section;
   return (
     <label className={s.muted} style={{ display: 'flex', gap: '0.3rem', alignItems: 'center', fontSize: '0.72rem' }}>
-      <input type="checkbox" name="held" value={it.localRef} defaultChecked={it.held} disabled={decided} /> hold
+      <input type="checkbox" name="held" value={`${section}:${it.localRef}`} defaultChecked={it.held} disabled={decided} /> hold
     </label>
   );
 }

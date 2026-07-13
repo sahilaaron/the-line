@@ -319,23 +319,32 @@ export const qaContractSchema = z.object({
 export type QaContract = z.infer<typeof qaContractSchema>;
 
 /* ---- human decision ---- */
+/** Composite held-item identity: a localRef is only unique WITHIN a section. */
+export const heldItemSchema = z.object({
+  section: z.enum(['entity', 'time', 'relationship', 'claim', 'source', 'media', 'question', 'next_entity']),
+  localRef: z.string().min(1),
+});
+
 export const humanDecisionSchema = z
   .object({
-    decision: z.enum(['approve', 'approve_with_holds', 'return', 'merge', 'reject']),
+    // `mark_duplicate` records that the subject duplicates an existing canonical
+    // entity; it does NOT deep-merge/reparent data (a later dedicated cycle).
+    decision: z.enum(['approve', 'approve_with_holds', 'return', 'mark_duplicate', 'reject']),
     reviewer: z.string().optional(),
     instructions: z.string().optional(),
     reason: z.string().optional(),
-    mergeTargetSlug: z.string().optional(),
-    heldItemRefs: z.array(z.string()).default([]),
+    duplicateOfSlug: z.string().optional(),
+    heldItems: z.array(heldItemSchema).default([]),
   })
   .superRefine((d, ctx) => {
-    if (d.decision === 'merge' && !d.mergeTargetSlug)
-      ctx.addIssue({ code: 'custom', path: ['mergeTargetSlug'], message: 'merge requires a mergeTargetSlug' });
+    if (d.decision === 'mark_duplicate' && !d.duplicateOfSlug)
+      ctx.addIssue({ code: 'custom', path: ['duplicateOfSlug'], message: 'mark_duplicate requires duplicateOfSlug (the canonical entity it duplicates)' });
     if (d.decision === 'return' && !d.instructions)
       ctx.addIssue({ code: 'custom', path: ['instructions'], message: 'return requires correction instructions' });
     if (d.decision === 'reject' && !d.reason)
       ctx.addIssue({ code: 'custom', path: ['reason'], message: 'reject requires a reason' });
   });
+export type HeldItem = z.infer<typeof heldItemSchema>;
 export type HumanDecisionInput = z.infer<typeof humanDecisionSchema>;
 
 /* ---- run / job inputs ---- */

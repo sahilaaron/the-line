@@ -37,11 +37,11 @@ export const PACKAGE_TRANSITIONS: Record<PackageStatus, PackageStatus[]> = {
   submitted: ['qa_pending', 'qa_complete', 'in_review', 'returned', 'rejected'],
   qa_pending: ['qa_complete', 'in_review', 'returned'],
   qa_complete: ['in_review', 'returned'],
-  in_review: ['approved', 'approved_with_holds', 'returned', 'merged', 'rejected'],
+  in_review: ['approved', 'approved_with_holds', 'returned', 'marked_duplicate', 'rejected'],
   approved: ['promoted'],
   approved_with_holds: ['promoted'],
   returned: [],
-  merged: [],
+  marked_duplicate: [],
   rejected: [],
   promoted: [],
 };

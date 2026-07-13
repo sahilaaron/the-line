@@ -7,7 +7,8 @@ import s from './crm.module.css';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-export default async function Dashboard() {
+export default async function Dashboard({ searchParams }: { searchParams: Promise<{ captured?: string }> }) {
+  const { captured } = await searchParams;
   const db = getDevDb();
   let data: Awaited<ReturnType<typeof getDashboard>> | null = null;
   try {
@@ -29,6 +30,13 @@ export default async function Dashboard() {
     <div>
       <h1 className={s.h}>Research Control</h1>
       <p className={s.sub}>Candidate research → private canonical graph. Publication stays a separate step.</p>
+      {captured && (
+        <div className={s.card}>
+          {captured === 'queued' && 'Topic queued.'}
+          {captured === 'already_queued' && 'Already queued — no duplicate created.'}
+          {captured === 'already_canonical' && 'Already a sufficiently-complete canonical entity — skipped.'}
+        </div>
+      )}
 
       <div className={s.grid}>
         <Stat n={sum(data.jobsByStatus)} l="jobs total" />

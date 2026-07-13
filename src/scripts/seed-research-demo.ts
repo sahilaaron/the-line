@@ -8,9 +8,8 @@
 import path from 'node:path';
 import { migrate } from 'drizzle-orm/pglite/migrator';
 import { getDevClient, getDevDb, closeDevClient } from '../db/client/dev';
-import { createJob } from '../db/repositories/research';
-import { normalizeText } from '../db/repositories/graph-ext';
 import { createRun } from '../services/research/run';
+import { captureManualJob } from '../services/research/capture';
 import { claimNextJob } from '../services/research/queue';
 import { submitPackage } from '../services/research/submit';
 import { recordQa } from '../services/research/qa';
@@ -27,14 +26,11 @@ async function main() {
 
   await seedSteamEngineExistingCanon(db);
   const run = await createRun(db, { batchLimit: 3, operator: 'Sahil' });
-  await createJob(db, {
-    centralTitle: 'Steam engine (provisional record)',
-    centralUrl: 'https://en.wikipedia.org/wiki/Steam_engine',
+  await captureManualJob(db, {
+    title: 'Steam engine (provisional record)',
+    url: 'https://en.wikipedia.org/wiki/Steam_engine',
     focusNote: 'Prove the pipeline end to end.',
-    origin: 'manual',
     priority: 50,
-    dedupeKey: normalizeText('steam engine'),
-    status: 'queued',
   });
   const claim = await claimNextJob(db, run.id, { worker: 'seed' });
   if (claim.job) {

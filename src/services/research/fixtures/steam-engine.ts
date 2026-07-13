@@ -108,7 +108,7 @@ export const STEAM_ENGINE_QA = {
 export const STEAM_ENGINE_DECISION = {
   decision: 'approve_with_holds' as const,
   reviewer: 'Sahil',
-  heldItemRefs: ['rel-newcomen'],
+  heldItems: [{ section: 'relationship' as const, localRef: 'rel-newcomen' }],
 };
 
 /** Seed the two existing canonical entities the fixture matches against. */

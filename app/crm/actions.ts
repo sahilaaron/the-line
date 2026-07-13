@@ -7,11 +7,10 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { getDevDb } from '@/src/db/client/dev';
-import { createJob } from '@/src/db/repositories/research';
-import { normalizeText } from '@/src/db/repositories/graph-ext';
 import { createRun, requestStop } from '@/src/services/research/run';
+import { captureManualJob } from '@/src/services/research/capture';
 import { decidePackage } from '@/src/services/research/decision';
-import { manualCaptureSchema, createRunSchema } from '@/src/db/validation/research';
+import { createRunSchema } from '@/src/db/validation/research';
 
 export async function createRunAction(formData: FormData) {
   const db = getDevDb();
@@ -31,24 +30,15 @@ export async function stopRunAction(formData: FormData) {
 
 export async function manualCaptureAction(formData: FormData) {
   const db = getDevDb();
-  const input = manualCaptureSchema.parse({
+  const result = await captureManualJob(db, {
     title: (formData.get('title') as string) || undefined,
     url: (formData.get('url') as string) || undefined,
     focusNote: (formData.get('focusNote') as string) || undefined,
     priority: Number(formData.get('priority') ?? 0),
   });
-  const key = normalizeText(input.url ?? input.title ?? '');
-  await createJob(db, {
-    centralTitle: input.title ?? input.url ?? 'Untitled',
-    centralUrl: input.url,
-    focusNote: input.focusNote,
-    origin: 'manual',
-    priority: input.priority,
-    dedupeKey: key,
-    status: 'queued',
-  });
   revalidatePath('/crm');
   revalidatePath('/crm/queue');
+  redirect(`/crm?captured=${result.status}`);
 }
 
 export async function decisionAction(formData: FormData) {
@@ -58,16 +48,20 @@ export async function decisionAction(formData: FormData) {
     | 'approve'
     | 'approve_with_holds'
     | 'return'
-    | 'merge'
+    | 'mark_duplicate'
     | 'reject';
-  const heldItemRefs = formData.getAll('held').map(String);
+  // Checkbox values are "section:localRef" (refs are only unique within a section).
+  const heldItems = formData.getAll('held').map(String).map((v) => {
+    const idx = v.indexOf(':');
+    return { section: v.slice(0, idx), localRef: v.slice(idx + 1) };
+  });
   await decidePackage(db, packageId, {
     decision,
     reviewer: 'Sahil',
-    heldItemRefs,
+    heldItems,
     instructions: (formData.get('instructions') as string) || undefined,
     reason: (formData.get('reason') as string) || undefined,
-    mergeTargetSlug: (formData.get('mergeTargetSlug') as string) || undefined,
+    duplicateOfSlug: (formData.get('duplicateOfSlug') as string) || undefined,
   });
   revalidatePath('/crm');
   revalidatePath(`/crm/packages/${packageId}`);

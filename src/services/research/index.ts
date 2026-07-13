@@ -5,6 +5,7 @@ export * from './discovery';
 export * from './hash';
 export * from './queue';
 export * from './run';
+export * from './capture';
 export * from './resolver';
 export * from './submit';
 export * from './qa';

@@ -11,6 +11,7 @@ import {
 import { orderJobs, selectNextJob, isClaimable } from './queue';
 import type { ResearchJob } from '../../db/schema';
 import { researchPackageEnvelopeSchema } from '../../db/validation/research';
+import { relationshipCreateSchema } from '../../db/validation/relationship';
 import { STEAM_ENGINE_ENVELOPE } from './fixtures/steam-engine';
 
 const T0 = new Date('2026-07-14T00:00:00Z');
@@ -124,5 +125,18 @@ describe('research-package envelope validator', () => {
       ],
     };
     expect(researchPackageEnvelopeSchema.safeParse(bad).success).toBe(false);
+  });
+});
+
+describe('relationship validation requires a type or a typeKey', () => {
+  const base = { sourceEntityId: 'a', targetEntityId: 'b' };
+  it('rejects neither type nor typeKey', () => {
+    expect(relationshipCreateSchema.safeParse({ ...base }).success).toBe(false);
+  });
+  it('accepts a typeKey-only relationship', () => {
+    expect(relationshipCreateSchema.safeParse({ ...base, typeKey: 'mentored' }).success).toBe(true);
+  });
+  it('accepts a legacy enum-type relationship', () => {
+    expect(relationshipCreateSchema.safeParse({ ...base, type: 'influenced' }).success).toBe(true);
   });
 });

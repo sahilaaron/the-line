@@ -30,6 +30,21 @@ export async function recordQa(db: Db, packageId: string, rawContract: unknown):
     });
     if (!pkg) throw new Error(`package ${packageId} not found`);
 
+    // Validate flag targets: a targeted flag must identify a real item in
+    // this package. Package-level flags (no target) are preserved.
+    const items = (await tx.query.researchPackageItems.findMany()).filter((i) => i.packageId === packageId);
+    const itemKeys = new Set(items.map((i) => `${i.section} ${i.localRef}`));
+    for (const flag of contract.flags) {
+      if (flag.targetSection || flag.targetRef) {
+        if (!flag.targetSection || !flag.targetRef) {
+          throw new Error('a QA flag target needs BOTH targetSection and targetRef (or neither for a package-level flag)');
+        }
+        if (!itemKeys.has(`${flag.targetSection} ${flag.targetRef}`)) {
+          throw new Error(`QA flag targets "${flag.targetSection}/${flag.targetRef}" which is not an item in package ${packageId}`);
+        }
+      }
+    }
+
     const [result] = await tx
       .insert(qaResults)
       .values({
