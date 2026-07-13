@@ -6,7 +6,13 @@
  */
 import { sql } from 'drizzle-orm';
 import { boolean, check, index, integer, pgTable, text, timestamp, unique } from 'drizzle-orm/pg-core';
-import { claimSubjectTypeEnum, claimVerificationStatusEnum, newId, sourceTypeEnum } from './shared';
+import {
+  assertionClassEnum,
+  claimSubjectTypeEnum,
+  claimVerificationStatusEnum,
+  newId,
+  sourceTypeEnum,
+} from './shared';
 import { relationships } from './relationships';
 
 export const claims = pgTable(
@@ -15,8 +21,12 @@ export const claims = pgTable(
     id: text('id').primaryKey().$defaultFn(newId),
     text: text('text').notNull(),
     subjectType: claimSubjectTypeEnum('subject_type').notNull(),
-    /** Polymorphic reference: id of an entities/relationships/periods row. */
+    /** Polymorphic ref: id of an entities/relationships/periods/
+     * entity_time_associations row (subject_type says which). */
     subjectId: text('subject_id').notNull(),
+    /** Provenance class. A claim promoted verified/corroborated must be
+     * recorded_fact or interpretation (enforced by validator + audit). */
+    assertionClass: assertionClassEnum('assertion_class').notNull().default('recorded_fact'),
     confidence: integer('confidence').notNull().default(50),
     verificationStatus: claimVerificationStatusEnum('verification_status')
       .notNull()

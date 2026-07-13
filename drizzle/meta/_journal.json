@@ -15,6 +15,13 @@
       "when": 1783702218587,
       "tag": "0001_aspiring_darkhawk",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783970187847,
+      "tag": "0002_research_staging_crm",
+      "breakpoints": true
     }
   ]
 }
