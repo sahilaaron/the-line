@@ -623,7 +623,7 @@ The deferred-builds list (none started) lives in GOAL.md. README and
 GOAL.md were corrected so neither implies 1969-only descent, a fully
 disconnected database, or that the stacked layout is final.
 
-## Cycle 6 — Database-backed YoL local timeline world (issue #14, 2026-07-10, IN PROGRESS)
+## Cycle 6 — Database-backed YoL local timeline world (issue #14, 2026-07-10, complete - merged PR #15)
 
 ### Architecture decisions
 - **Schema (migration `drizzle/0001_aspiring_darkhawk.sql`)**: local
@@ -802,7 +802,7 @@ disconnected database, or that the stacked layout is final.
 - `findNearestCuratedAnchor` itself is kept (its repo test documents its
   slug semantics) but is no longer used to locate anchors.
 
-## Cycle 7 — Historical Field & recursive Topic Worlds (issue #16, 2026-07-11, IN PROGRESS)
+## Cycle 7 — Historical Field & recursive Topic Worlds (issue #16, 2026-07-11, complete - merged PR #17)
 
 Kernel built and proven by Fable; construction handed to Opus
 (`instruction-set/YoL-layered-handover.md`). Architecture decisions:

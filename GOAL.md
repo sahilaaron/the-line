@@ -1,8 +1,8 @@
-# GOAL — Build Cycle 7: Historical Field & recursive Topic Worlds (ACTIVE)
+# GOAL — Build Cycle 7: Historical Field & recursive Topic Worlds (COMPLETE - merged PR #17)
 
 (Cycle 6 — the database-backed YoL local timeline — is complete and merged
 via PR #15; its outcome is recorded in `docs/implementation-notes.md`.
-This document describes the ACTIVE cycle, tracked as issue #16 on branch
+This document describes cycle 7 (now complete - merged PR #17), tracked as issue #16 on branch
 `issue-16/historical-field-topic-worlds`.)
 
 ## Mission
