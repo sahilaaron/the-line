@@ -21,7 +21,7 @@ test('manual input -> run -> staged package -> QA hold -> approval -> private ca
   const status = page.getByTestId('pkg-status');
   if ((await status.textContent())?.trim() !== 'promoted') {
     // The QA hold pre-checks rel-newcomen; approve excluding held items.
-    const holdBox = page.locator('input[name="held"][value="rel-newcomen"]');
+    const holdBox = page.locator('input[name="held"][value="relationship:rel-newcomen"]');
     await expect(holdBox).toBeChecked();
     await page.getByTestId('approve-holds').click();
     await expect(page.getByTestId('pkg-status')).toHaveText('promoted');
