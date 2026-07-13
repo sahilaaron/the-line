@@ -13,7 +13,7 @@ import { randomUUID } from 'node:crypto';
 import { and, eq, inArray, lt, or } from 'drizzle-orm';
 import { researchJobs, researchRuns, type ResearchJob, type ResearchRun } from '../../db/schema';
 import type { Db } from '../../db/repositories/types';
-import { DEFAULT_QUEUE_CONFIG, HUMAN_PRIORITY_ORIGINS, type QueueConfig } from './config';
+import { DEFAULT_QUEUE_CONFIG, type QueueConfig } from './config';
 import type { DiscoveryAdapter } from './discovery';
 import { noDiscoveryAdapter } from './discovery';
 import { normalizeText } from '../../db/repositories/graph-ext';

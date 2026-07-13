@@ -8,7 +8,6 @@ import { describe, it, expect } from 'vitest';
 import { and, eq } from 'drizzle-orm';
 import { freshMigratedDb } from '../../../db/testing/setup';
 import {
-  entities,
   entityTimeAssociations,
   relationships,
   researchJobs,

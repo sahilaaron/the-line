@@ -121,7 +121,7 @@ describe('resolver states (DB)', () => {
 
   it('distinguishes canonical_complete from canonical_incomplete by depth', async () => {
     const { db } = await freshMigratedDb();
-    const thin = await createEntity(db, { slug: 'thin', kind: 'concept', label: 'Thin' });
+    await createEntity(db, { slug: 'thin', kind: 'concept', label: 'Thin' });
     expect((await resolveEntity(db, { slug: 'thin' })).status).toBe('canonical_incomplete');
     const deep = await createEntity(db, { slug: 'deep', kind: 'concept', label: 'Deep' });
     const period = await createPeriod(db, { label: 'p', startYear: 1700 });

@@ -229,6 +229,35 @@ export async function runIntegrityAudit(db: Db): Promise<AuditReport> {
     }
   }
 
+  // --- Cycle 8A: relationship typeKey must resolve to a registered type ---
+  const registry = await db.query.relationshipTypeRegistry.findMany();
+  const registryKeys = new Set(registry.map((r) => r.key));
+  const acyclicKeys = new Set(registry.filter((r) => r.isAcyclic).map((r) => r.key));
+  for (const r of allRelationships) {
+    if (r.typeKey && !registryKeys.has(r.typeKey)) {
+      errors.push({
+        code: 'unknown_relationship_type_key',
+        message: `relationship ${r.id} uses unregistered type key "${r.typeKey}"`,
+        subjectId: r.id,
+      });
+    }
+  }
+  void acyclicKeys; // registry-driven acyclic policy is a superset of the constant list above
+
+  // --- Cycle 8A: a verified/corroborated claim must be a fact/interpretation,
+  // never an inference/forecast masquerading as verified truth ---
+  for (const c of allClaims) {
+    const v = (c as { verificationStatus?: string }).verificationStatus;
+    const ac = (c as { assertionClass?: string }).assertionClass;
+    if ((v === 'verified' || v === 'corroborated') && (ac === 'inference' || ac === 'forecast')) {
+      errors.push({
+        code: 'assertion_class_violation',
+        message: `claim ${c.id} is ${v} but assertion class is ${ac} (inference/forecast cannot be verified fact)`,
+        subjectId: c.id,
+      });
+    }
+  }
+
   const totals = {
     entities: allEntities.length,
     periods: allPeriods.length,
