@@ -139,7 +139,7 @@ export default async function PackageReview({ params }: { params: Promise<{ id: 
               <p className={s.muted} style={{ marginTop: '0.5rem' }} data-testid="duplicate-target">
                 Marked as a duplicate of{' '}
                 <b>{String((decisions[0]?.decisionSnapshot as { duplicateOfSlug?: string } | undefined)?.duplicateOfSlug ?? '—')}</b>
-                {' '}— this packagethis package&rsquo;s subject was NOT promotedrsquo;s subject was NOT promoted (duplicate recorded, not deep-merged).
+                {' '}— This package&rsquo;s subject was not promoted. The duplicate was recorded, but no entities or relationships were merged.
               </p>
             )}
           </div>

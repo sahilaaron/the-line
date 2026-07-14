@@ -9,6 +9,7 @@ import path from 'node:path';
 import { migrate } from 'drizzle-orm/pglite/migrator';
 import { getDevClient, getDevDb, closeDevClient } from '../db/client/dev';
 import { createRun } from '../services/research/run';
+import { createEntity } from '../db/repositories/entities';
 import { captureManualJob } from '../services/research/capture';
 import { claimNextJob } from '../services/research/queue';
 import { submitPackage } from '../services/research/submit';
@@ -38,6 +39,42 @@ async function main() {
     await recordQa(db, pkg.id, STEAM_ENGINE_QA);
     console.log(`[db:seed:research] run ${run.id}; package ${pkg.id} awaiting review (QA hold applied).`);
   }
+
+  // A SECOND package awaiting review, staged to be marked as a duplicate of an
+  // existing canonical entity (demo/test data only). Distinct subject slug so
+  // it is a genuine new candidate that turns out to duplicate 'aeolipile'.
+  await createEntity(db, {
+    slug: 'aeolipile',
+    kind: 'invention',
+    label: 'Aeolipile',
+    isPlaceholder: true,
+    isSynthetic: false,
+    editorialStatus: 'in_review',
+    graphStatus: 'canonical_incomplete',
+  });
+  await captureManualJob(db, { title: "Hero's engine (provisional record)", priority: 40 });
+  const dupClaim = await claimNextJob(db, run.id, { worker: 'seed' });
+  if (dupClaim.job) {
+    const dupEnvelope = {
+      schemaVersion: 1 as const,
+      submittedBy: 'seed',
+      entities: [
+        {
+          ref: 'central',
+          role: 'central' as const,
+          slug: 'hero-engine',
+          label: "Hero's engine (provisional record)",
+          kind: 'invention' as const,
+          classifications: ['invention'],
+          shortDescription: 'A first-century steam device; likely the same subject as the Aeolipile.',
+        },
+      ],
+    };
+    const { package: dupPkg } = await submitPackage(db, dupClaim.job.id, dupEnvelope, { submittedBy: 'seed' });
+    await recordQa(db, dupPkg.id, { recommendation: 'duplicate', summary: 'Looks like the Aeolipile.', flags: [] });
+    console.log(`[db:seed:research] duplicate-candidate package ${dupPkg.id} awaiting review.`);
+  }
+
   await closeDevClient();
 }
 
