@@ -136,3 +136,72 @@ Automatic public entity pages / Topic World overlays from published canonical
 entities; deep merge with reparenting; richer graph clustering/expand-collapse
 heuristics; a QA provider handoff; freshness/refresh policy; multi-run agent
 dashboards.
+
+## Correction-pass semantics (holds, atomic edits, queue leasing, counters)
+
+### Human holds vs QA-derived holds
+
+Every held item carries `hold_source`: `human` or `qa`. A human hold (set from
+the inspector) persists until a human removes it. A QA flag places a `qa` hold.
+When QA reruns, obsolete QA-derived holds (items no longer flagged by the latest
+QA result) are cleared automatically; a human hold is NEVER cleared by a QA
+rerun. `approve_with_holds` excludes any held item regardless of source.
+
+### Atomic edits + revisions
+
+Every candidate-edit operation (entity fields, relationship type, relationship
+endpoints, canonical match, hold/unhold, reject) runs as a SINGLE database
+transaction covering the payload mutation, QA invalidation/package-state update,
+and the append-only revision insert. If any step fails (e.g. the audit insert),
+the whole edit rolls back — no partial or unaudited edit remains. The immutable
+submitted envelope is never mutated; nothing writes canonical or `yol_*` rows.
+A material edit (field / type / endpoints / match) after QA reverts the package
+to `qa_pending` and blocks approval until QA is rerun. An explicit item-level
+rejection is never reversed by package approval and is never promoted.
+
+### Queue leasing + ownership
+
+A claim records the exact worker identity (`claimed_by_worker`) and a lease. All
+lease operations verify EXACT worker identity — never a prefix — so `agent-1`
+cannot operate a lease owned by `agent-10`. `begin`/`heartbeat` extend the
+lease; `release` returns the job to the queue; `fail` marks it failed;
+expired-lease recovery reclaims abandoned work. Atomic claims + lease recovery
+mean two agents can never hold one job.
+
+### Counter semantics (run)
+
+- **batchLimit** — the total number of jobs the run will CLAIM.
+- **claimedCount** — batch slots currently CONSUMED. A claim consumes a slot; a
+  release or an expired-lease recovery FREES the slot (the run can claim
+  replacement work); a completed / failed / returned outcome KEEPS the slot
+  (the batch was spent on that job). A run completes when `claimedCount ==
+  batchLimit` and no job is in flight (claimed/researching).
+- **completedCount / failedCount / returnedCount** — terminal outcome tallies,
+  each incremented exactly once (idempotent). The counters and the UI tell the
+  same story: `Awaiting Agent(s)` means a queued, claimable job — never work
+  already submitted or in QA.
+
+### "Awaiting Agent(s)" and manual CoWork
+
+`Awaiting Agent(s)` is a queued job with no live agent lease. Adding a topic
+only CREATES such a job — it never launches Claude. A human starts a Claude
+CoWork session, copies the generated Research Agent Prompt, and the agent claims
+the job via the CLI (`claim-next-active` / `claim --run`), works it, and submits
+a validated package. Opening a research batch likewise does not launch Claude.
+
+## Feature completeness (this cycle)
+
+Complete and tested (unit/integration): vocabulary v1 + endpoint validation;
+graph projection with canonical-match/hold/QA state; atomic candidate editing +
+revision history + QA invalidation; human-vs-QA hold provenance; queue
+leasing/ownership + counter repair on release/recovery; classification→kind
+preservation; honest display states + CLI. Rendered in the Studio UI: graph
+canvas, inspector (node + edge) with sources/flags/holds/questions/dates +
+canonical link, chronology re-layout, endpoint-filtered relationship dropdown,
+filters (kind/category/candidate-vs-canonical/QA-held/synthetic-dev), edit
+controls (label/match/endpoints/type/hold/reject), accessible table fallback.
+
+Intentionally deferred: deep canonical entity merge (mark_duplicate records a
+duplicate only); automatic public entity pages / Topic World overlays; graph
+auto-clustering for very dense packages; a real Wikipedia discovery adapter;
+production authentication.
