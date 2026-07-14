@@ -10,10 +10,16 @@
  * We use a handful of rows (not the full ~38k stress targets) so CI e2e
  * setup stays fast; scale/determinism of the synthetic generator itself is
  * covered by src/db/seed/synthetic.test.ts.
+ *
+ * It ALSO seeds the research-CRM demo fixtures (seedResearchDemo) on the same
+ * connection, so the CRM e2e specs (research-crm / marked-duplicate) have their
+ * awaiting-review packages. seedResearchDemo is idempotent (re-runs report
+ * "already seeded"), keeping db:seed:e2e safe to run repeatedly.
  */
 import { closeDevClient, getDevDb } from '../db/client/dev';
 import { seedPrototype } from '../db/seed/prototype';
 import { seedSynthetic } from '../db/seed/synthetic';
+import { seedResearchDemo } from '../services/research/fixtures/seed-demo';
 
 const E2E_SYNTHETIC_TARGETS = {
   entities: 12,
@@ -30,6 +36,8 @@ async function main() {
   console.log('[db:seed:e2e] prototype seed summary:', proto);
   const synth = await seedSynthetic(db, undefined, E2E_SYNTHETIC_TARGETS);
   console.log('[db:seed:e2e] tiny synthetic seed summary:', synth);
+  const crm = await seedResearchDemo(db);
+  console.log('[db:seed:e2e] research CRM demo:', crm.status);
   await closeDevClient();
 }
 

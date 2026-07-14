@@ -5,3 +5,5 @@ export * from './relationships';
 export * from './claims';
 export * from './yol';
 export * from './media';
+export * from './graph-ext';
+export * from './research';

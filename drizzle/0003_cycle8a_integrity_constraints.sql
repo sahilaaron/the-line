@@ -1,0 +1,3 @@
+CREATE UNIQUE INDEX "research_jobs_active_dedupe_unique" ON "research_jobs" USING btree ("dedupe_key") WHERE status in ('queued','claimed','researching','submitted');--> statement-breakpoint
+ALTER TABLE "package_decisions" ADD CONSTRAINT "package_decisions_pkg_unique" UNIQUE("package_id");--> statement-breakpoint
+ALTER TABLE "relationships" ADD CONSTRAINT "relationships_type_or_typekey" CHECK ("relationships"."type" IS NOT NULL OR "relationships"."type_key" IS NOT NULL);

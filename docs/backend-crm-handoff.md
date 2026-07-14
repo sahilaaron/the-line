@@ -126,3 +126,16 @@ values, lane geometry and the placeholder plate treatments are FRONTEND
 design/architecture. The CRM stores content, weights, identity TOKENS and
 composition OVERRIDES — never CSS, never layout code, never transition
 choreography.
+
+---
+
+## Cycle 8A note
+
+The CRM cycle (issue #5) has now built the STAGING + promotion side of this
+contract. It does NOT change the VM contracts in `src/domain/worlds.ts` and
+does NOT touch the renderers, world stack, layout or `yol_*` curation. The
+research pipeline populates the PRIVATE canonical graph; projecting a published
+canonical entity into these VMs (the public automatic page / Topic World
+overlay) remains a future, separate step — the data model supports it and the
+adapter boundary here is unchanged. See
+`instruction-set/backend-crm-opus-handover.md` §5.

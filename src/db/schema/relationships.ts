@@ -15,9 +15,10 @@
  */
 import { sql } from 'drizzle-orm';
 import { boolean, check, index, integer, pgTable, text, timestamp, unique } from 'drizzle-orm/pg-core';
-import { editorialStatusEnum, newId, relationshipTypeEnum } from './shared';
+import { assertionClassEnum, editorialStatusEnum, newId, relationshipTypeEnum } from './shared';
 import { entities } from './entities';
 import { periods } from './periods';
+import { relationshipTypeRegistry } from './graph-ext';
 
 export const relationships = pgTable(
   'relationships',
@@ -29,7 +30,19 @@ export const relationships = pgTable(
     targetEntityId: text('target_entity_id')
       .notNull()
       .references(() => entities.id, { onDelete: 'cascade' }),
-    type: relationshipTypeEnum('type').notNull(),
+    /** Legacy fixed enum. Kept for the original 13 builtin types + existing
+     * rows; NULLABLE from Cycle 8A so registry-only types store via typeKey.
+     * Read code coalesces typeKey ?? type. */
+    type: relationshipTypeEnum('type'),
+    /** Cycle 8A controlled relationship-type registry key (grows without a
+     * code migration). Backfilled to `type` for existing rows in 0002. */
+    typeKey: text('type_key').references(() => relationshipTypeRegistry.key, {
+      onDelete: 'restrict',
+    }),
+    assertionClass: assertionClassEnum('assertion_class').notNull().default('recorded_fact'),
+    contextPlaceId: text('context_place_id').references(() => entities.id, {
+      onDelete: 'set null',
+    }),
     explanation: text('explanation'),
     strength: integer('strength').notNull().default(50),
     confidence: integer('confidence').notNull().default(50),
@@ -48,8 +61,18 @@ export const relationships = pgTable(
     index('relationships_type_idx').on(t.type),
     index('relationships_source_type_idx').on(t.sourceEntityId, t.type),
     index('relationships_target_type_idx').on(t.targetEntityId, t.type),
+    index('relationships_type_key_idx').on(t.typeKey),
     unique('relationships_source_target_type_unique').on(t.sourceEntityId, t.targetEntityId, t.type),
+    unique('relationships_source_target_typekey_unique').on(
+      t.sourceEntityId,
+      t.targetEntityId,
+      t.typeKey,
+    ),
     check('relationships_no_self_link', sql`${t.sourceEntityId} <> ${t.targetEntityId}`),
+    check(
+      'relationships_type_or_typekey',
+      sql`${t.type} IS NOT NULL OR ${t.typeKey} IS NOT NULL`,
+    ),
     check('relationships_strength_range', sql`${t.strength} >= 0 AND ${t.strength} <= 100`),
     check('relationships_confidence_range', sql`${t.confidence} >= 0 AND ${t.confidence} <= 100`),
   ],

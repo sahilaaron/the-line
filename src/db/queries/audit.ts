@@ -54,10 +54,29 @@ export async function runIntegrityAudit(db: Db): Promise<AuditReport> {
     if (n > 1) errors.push({ code: 'duplicate_entity_slug', message: `slug "${slug}" used by ${n} entities` });
   }
 
-  // --- duplicate edges (source,target,type) — defense in depth vs the unique constraint ---
+  // --- relationship-type registry (loaded once for the checks below) ---
+  const registry = await db.query.relationshipTypeRegistry.findMany();
+  const registryKeys = new Set(registry.map((r) => r.key));
+  const acyclicKeys = new Set<string>([
+    ...ACYCLIC_EXPECTED_RELATIONSHIP_TYPES,
+    ...registry.filter((r) => r.isAcyclic).map((r) => r.key),
+  ]);
+  const symmetricKeys = new Set(
+    registry.filter((r) => r.directionality === 'symmetric').map((r) => r.key),
+  );
+  /** Effective type = registry typeKey when present, else the legacy enum. */
+  const relTypeOf = (r: (typeof allRelationships)[number]): string | null => r.typeKey ?? r.type ?? null;
+
+  // --- duplicate edges — keyed by EFFECTIVE type (typeKey ?? type). For a
+  // symmetric type, endpoints are canonicalized so a reversed instance of the
+  // same relationship is detected as a duplicate. ---
   const edgeCounts = new Map<string, number>();
   for (const r of allRelationships) {
-    const key = `${r.sourceEntityId}|${r.targetEntityId}|${r.type}`;
+    const effType = relTypeOf(r);
+    let a = r.sourceEntityId;
+    let b = r.targetEntityId;
+    if (effType != null && symmetricKeys.has(effType) && a > b) [a, b] = [b, a];
+    const key = `${a}|${b}|${effType}`;
     edgeCounts.set(key, (edgeCounts.get(key) ?? 0) + 1);
   }
   for (const [key, n] of edgeCounts) {
@@ -188,9 +207,27 @@ export async function runIntegrityAudit(db: Db): Promise<AuditReport> {
     }
   }
 
-  // --- cycles in expected-acyclic relationship types ---
-  for (const type of ACYCLIC_EXPECTED_RELATIONSHIP_TYPES) {
-    const edges = allRelationships.filter((r) => r.type === type);
+  // Every relationship must carry a type (enum) or a registry typeKey.
+  for (const r of allRelationships) {
+    if (r.type == null && r.typeKey == null) {
+      errors.push({
+        code: 'relationship_missing_type',
+        message: `relationship ${r.id} has neither a type nor a typeKey`,
+        subjectId: r.id,
+      });
+    }
+    if (r.typeKey && !registryKeys.has(r.typeKey)) {
+      errors.push({
+        code: 'unknown_relationship_type_key',
+        message: `relationship ${r.id} uses unregistered type key "${r.typeKey}"`,
+        subjectId: r.id,
+      });
+    }
+  }
+
+  // --- cycles in expected-acyclic relationship types (registry-driven) ---
+  for (const type of acyclicKeys) {
+    const edges = allRelationships.filter((r) => relTypeOf(r) === type);
     const adjacency = new Map<string, string[]>();
     for (const e of edges) {
       if (!adjacency.has(e.sourceEntityId)) adjacency.set(e.sourceEntityId, []);
@@ -226,6 +263,21 @@ export async function runIntegrityAudit(db: Db): Promise<AuditReport> {
           break;
         }
       }
+    }
+  }
+
+
+  // --- Cycle 8A: a verified/corroborated claim must be a fact/interpretation,
+  // never an inference/forecast masquerading as verified truth ---
+  for (const c of allClaims) {
+    const v = (c as { verificationStatus?: string }).verificationStatus;
+    const ac = (c as { assertionClass?: string }).assertionClass;
+    if ((v === 'verified' || v === 'corroborated') && (ac === 'inference' || ac === 'forecast')) {
+      errors.push({
+        code: 'assertion_class_violation',
+        message: `claim ${c.id} is ${v} but assertion class is ${ac} (inference/forecast cannot be verified fact)`,
+        subjectId: c.id,
+      });
     }
   }
 

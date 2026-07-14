@@ -1,11 +1,11 @@
 /**
- * Relationship repository. addRelationship() is safe against the duplicate
- * (source, target, type) case: it checks first and returns the existing
- * row with `created: false` rather than throwing a constraint error, while
- * still relying on the DB unique constraint as the source of truth under
- * concurrent writers.
+ * Relationship repository. Identity is (source, target, typeKey) from Cycle
+ * 8A (legacy `type` used only for rows predating the registry). addRelationship
+ * is safe against duplicates: it checks first and returns the existing row
+ * with `created: false` rather than throwing, still relying on the DB unique
+ * constraints under concurrent writers.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, type SQL } from 'drizzle-orm';
 import { relationships, type NewRelationship, type Relationship } from '../schema';
 import type { Db } from './types';
 
@@ -14,30 +14,33 @@ export interface AddRelationshipResult {
   created: boolean;
 }
 
+/** Durable identity predicate: prefer typeKey, fall back to the legacy enum. */
+function relationshipIdentityWhere(input: NewRelationship): SQL | undefined {
+  const base = and(
+    eq(relationships.sourceEntityId, input.sourceEntityId),
+    eq(relationships.targetEntityId, input.targetEntityId),
+  );
+  if (input.typeKey != null) return and(base, eq(relationships.typeKey, input.typeKey));
+  if (input.type != null) return and(base, eq(relationships.type, input.type));
+  return base;
+}
+
 export async function addRelationship(db: Db, input: NewRelationship): Promise<AddRelationshipResult> {
-  const existing = await db.query.relationships.findFirst({
-    where: and(
-      eq(relationships.sourceEntityId, input.sourceEntityId),
-      eq(relationships.targetEntityId, input.targetEntityId),
-      eq(relationships.type, input.type),
-    ),
-  });
-  if (existing) {
-    return { relationship: existing, created: false };
+  // A relationship must carry a legacy enum type OR a registry typeKey (also a
+  // DB CHECK; guarded here so callers get a clear error, not a constraint dump).
+  if (input.type == null && input.typeKey == null) {
+    throw new Error('a relationship requires a `type` (builtin enum) or a `typeKey` (registry)');
   }
+  const existing = await db.query.relationships.findFirst({
+    where: relationshipIdentityWhere(input),
+  });
+  if (existing) return { relationship: existing, created: false };
   try {
     const [row] = await db.insert(relationships).values(input).returning();
     return { relationship: row, created: true };
   } catch (err) {
-    // Race: another writer inserted the same (source, target, type) between
-    // our check and insert. Re-read and return it instead of surfacing the
-    // constraint violation to the caller.
     const raceRow = await db.query.relationships.findFirst({
-      where: and(
-        eq(relationships.sourceEntityId, input.sourceEntityId),
-        eq(relationships.targetEntityId, input.targetEntityId),
-        eq(relationships.type, input.type),
-      ),
+      where: relationshipIdentityWhere(input),
     });
     if (raceRow) return { relationship: raceRow, created: false };
     throw err;
@@ -52,8 +55,15 @@ export async function listIncoming(db: Db, entityId: string): Promise<Relationsh
   return db.query.relationships.findMany({ where: eq(relationships.targetEntityId, entityId) });
 }
 
-export async function listByType(db: Db, type: Relationship['type']): Promise<Relationship[]> {
+export async function listByType(
+  db: Db,
+  type: NonNullable<Relationship['type']>,
+): Promise<Relationship[]> {
   return db.query.relationships.findMany({ where: eq(relationships.type, type) });
+}
+
+export async function listByTypeKey(db: Db, typeKey: string): Promise<Relationship[]> {
+  return db.query.relationships.findMany({ where: eq(relationships.typeKey, typeKey) });
 }
 
 export async function findDirectConnections(db: Db, entityId: string): Promise<Relationship[]> {

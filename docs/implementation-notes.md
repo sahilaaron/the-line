@@ -944,3 +944,140 @@ descent→depth-4→return recording) captured, NOT committed.
 The 45s/command cap means `npm run test:e2e` and the full `npm run db:test`
 cannot run as ONE command here; both are green run per-file/with an
 adequate per-test timeout. Real-GPU motion review still outstanding.
+
+---
+
+## Cycle 8A — Research staging pipeline & CRM kernel (issue #5, Opus)
+
+Architecture/kernel cycle. Built the durable data model, state machines,
+service boundaries and a minimal end-to-end CRM proof that turns candidate
+research into the PRIVATE canonical graph. Companion docs:
+`docs/research-operations.md`, `docs/research-package-contract.md`,
+`instruction-set/backend-crm-opus-handover.md`.
+
+### Architecture decisions
+
+- **Kind drift resolved deliberately.** `entities.kind` stays the small
+  renderer enum; a controlled `entity_classifications` vocabulary
+  (`CLASSIFICATION_VOCABULARY`) carries the richer meaning. Two explicit
+  reconciliations: `idea→concept`, `discovery→event`. New classifications need
+  no code migration.
+- **Relationship-type registry, not enum growth.** `relationship_type_registry`
+  (inverse wording, directionality, allowed kinds, cycle policy) with a
+  `relationships.typeKey` bridge. The legacy `type` enum was relaxed to
+  nullable and backfilled; 13 builtins seeded in-migration. New registry-only
+  types store `typeKey` with `type=null`; read code coalesces `typeKey ?? type`.
+- **Assertion classes** (`recorded_fact`/`interpretation`/`inference`/
+  `forecast`) as a small enum column on claims + relationships. The validator
+  and `db:audit` guarantee inference/forecast can never be a verified fact.
+  Smallest durable representation after inspecting the claims schema.
+- **Typed multi-role time** via `entity_time_associations` (kept
+  `primaryPeriodId` for renderer compat). Never JS `Date`.
+- **Staging = validated JSON payloads + immutable envelope; canon = normalized.**
+  Deliberate: staging is transient and reviewed per-section, so
+  `research_package_items.payload` (JSON) + `research_packages.envelope`
+  (immutable snapshot, `submissionHash` for idempotency) is the right cost.
+  Canonical truth stays fully normalized.
+- **Promotion is the ONE atomic path** staging→canon: match by external id
+  then controlled identity, never fuzzy-merge, create private draft stubs for
+  new neighbours, enqueue frontier jobs, preserve provenance, exclude
+  synthetic/held items, never write `yol_*`, idempotent via a status guard +
+  unique constraints, rolls back entirely on any error.
+
+### Verification (sandbox, SwiftShader/PGlite)
+
+- lint 0 errors, `tsc --noEmit` 0 errors.
+- Unit/integration: **193 tests pass, 0 fail** across schema/repositories (14),
+  validation (23), queries (audit+yol 13, yol-read-model 8, traversal in the
+  experience batch), experience+data regressions (87 incl. world-stack/field/
+  YoL), seed+pgbare (11), import-export (6), and the new research suites:
+  `kernel-pure` (10), `kernel-db` (11), `steam-engine.integration` (10). The 3
+  previously-flaky PGlite timeouts pass with `--testTimeout=30000` (perf, not
+  logic).
+- `db:check` clean, `db:validate` 17/17, `db:audit` 0 errors (1 pre-existing
+  unreachable-entities warning), `db:seed`/`db:seed:research` OK.
+- `next build`: compiled + type-checked + all 4 pages generated ✓ (final
+  build-trace step and the full Playwright run exceed the 45s sandbox shell
+  cap; both are CI-ready). CRM proven at runtime via a live-server smoke: all
+  `/crm` pages HTTP 200 against the seeded+promoted DB; the canonical record
+  shows `canonical_incomplete` / `private — not published` / the accepted
+  `improved_by` relationship / provenance, and the held `replaced→Newcomen`
+  relationship is absent.
+
+### Known limitations (see Opus handover for the full list)
+
+Merge promotion is shallow; return-correction loop is queued but not UI-proven
+end to end; random discovery is a deterministic/injected stub; no auth
+(local/internal only); completeness/freshness heuristics are coarse.
+
+### Cycle 8A correction pass (Opus, post-Codex-audit)
+
+Codex audited the kernel bundle and found lifecycle/integrity invariants that
+were untested/unenforced. Repaired without expanding scope (migration 0003 +
+service hardening):
+
+- **Atomic, replay-safe approval+promotion.** `decidePackage` now validates
+  transitions against the package's ACTUAL status, enforces exactly one final
+  decision (unique constraint + guard), treats an identical replay as a
+  harmless no-op (returning the existing result / retrying a failed promotion),
+  and rejects a conflicting second decision. Promotion was refactored to
+  `promoteWithinTx` and runs INSIDE the decision transaction, so the decision,
+  per-item decisions, canonical writes, frontier jobs and final `promoted`
+  status commit or roll back together. A promotion failure leaves the package
+  reviewable and safely retryable with no partial writes (proven by tests).
+- **Composite held-item identity.** Holds are `{section, localRef}` (refs are
+  only unique within a section) across validation, persistence, services, CRM
+  and the contract — identical refs in two sections hold independently.
+- **Relationship typing enforced.** DB CHECK (`type` or `type_key`), repository
+  + Zod guards, and an audit `relationship_missing_type` check. Audit cycle
+  detection now uses registry `isAcyclic` types (not only the legacy constant);
+  promotion enforces the registry's allowed endpoint kinds and collapses
+  reversed duplicates for symmetric types.
+- **Manual capture** goes through `captureManualJob`: resolves canonical first
+  (skips a sufficiently-complete entity), prevents duplicate active jobs
+  (partial unique index + race-safe catch), returns queued/already_queued/
+  already_canonical.
+- **No silent drops.** Promotion FAILS + rolls back on an accepted item it
+  cannot promote (unresolved ref, unknown/forecast relationship type, missing
+  source, disallowed endpoint kind); a dependency on a deliberately-excluded
+  synthetic item cascades as a counted exclusion, not an error.
+- **QA flag targets validated** against real package items; package-level flags
+  preserved.
+- Shallow `merge` renamed to `mark_duplicate` (records a duplicate only).
+- Hygiene: removed a stray `.deb` from git, README EOL, delivery attribution.
+
+New tests: `corrections.test.ts` (12) + relationship-typing pure tests cover
+every repaired invariant; the Steam Engine proof and all prior suites remain
+green.
+
+### Cycle 8A correction pass 2 (Opus, second Codex audit)
+
+Codex's second audit added three adversarial tests (all now permanent) plus
+refinements:
+
+- **Semantic decision fingerprint.** Decision replay is compared by a canonical
+  fingerprint over decision + reviewer + instructions + reason + resolved
+  duplicate target + sorted composite held-item set. An exact replay is a
+  no-op; any changed field (e.g. a different `mark_duplicate` target, changed
+  return instructions or rejection reason) is a conflicting decision and is
+  rejected. Reordered identical `heldItems` are still an idempotent replay.
+- **Held-item identity validation.** `heldItems` are only accepted for
+  `approve_with_holds`; malformed and duplicate identities are rejected by the
+  validator; a held identity that does not name a real package item fails and
+  rolls back the whole decision.
+- **Registry duplicate auditing.** The audit's duplicate-edge key now uses the
+  EFFECTIVE type (`typeKey ?? type`) and canonicalizes endpoints for symmetric
+  registry types, so two distinct registry types between the same entities are
+  no longer falsely reported and a reversed symmetric duplicate is detected.
+- **QaOutcome** returns composite `heldItems: {section, localRef}[]` (the CLI
+  output too), not an ambiguous `heldRefs: string[]`.
+- **CRM** `marked_duplicate` terminal state: the obsolete `merged` check is
+  gone; the page shows "Decision recorded", hides the form, and shows the
+  duplicate target clearly ("duplicate target" wording); removed a useless
+  `researchPackages.findFirst()` in `decisionAction`.
+- **Migration simplification.** Migration 0002 now creates the final enum
+  values (`mark_duplicate`/`marked_duplicate`) directly; 0003 is limited to the
+  new integrity constraints/indexes — no data-sensitive enum drop/recreate.
+
+New/updated tests: `corrections.test.ts` (21) + held-rule pure tests; Steam
+Engine proof and all prior suites remain green.

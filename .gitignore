@@ -68,3 +68,5 @@ docs/evidence/**/*.gif
 docs/evidence/**/*.webp
 docs/evidence/**/*.webm
 docs/evidence/**/*.mp4
+*.bundle
+*.deb

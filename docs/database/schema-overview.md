@@ -1,7 +1,8 @@
 # Database Schema Overview
 
-Drizzle ORM schema, PGlite (embedded Postgres-compatible), 24 tables across
-8 concerns. Source of truth: `src/db/schema/*.ts`. Migrations: `drizzle/*.sql`.
+Drizzle ORM schema, PGlite (embedded Postgres-compatible), 36 tables.
+Cycle 3 established 22, Cycle 6 added 2, Cycle 8A added 12 (5 canonical graph
+extensions + 7 research staging). Source of truth: `src/db/schema/*.ts`. Migrations: `drizzle/*.sql`.
 
 - Cycle 3 established the base schema (22 tables).
 - Cycle 6 (issue #14, migration `drizzle/0001_*.sql`) added the Year-on-Line
@@ -201,3 +202,68 @@ Note: `claims.subjectId` and `media_associations.subjectId` are polymorphic
 references (entity/relationship/period, or entity/period/yol_composition
 respectively) — not real FK columns, so they're not drawn as FK edges above.
 The integrity audit (`npm run db:audit`) checks they resolve to a real row.
+
+## Cycle 8A additions (issue #5, migration 0002)
+
+Cycle 8A evolves the foundation (it does not replace it) for the research
+staging pipeline. Three concerns stay strictly separated: research staging,
+private canonical graph, and public/editorial (`yol_*`, never written by
+research). See `docs/research-operations.md` and
+`instruction-set/backend-crm-opus-handover.md`.
+
+### Canonical graph extensions
+
+- **`entity_aliases`** — aliases/historical names/spellings/abbreviations/
+  translations, with a `normalized` match column.
+- **`entity_external_ids`** — Wikipedia/Wikidata/VIAF/… identifiers; a scheme+
+  value resolves to exactly one entity (strongest, non-fuzzy match signal).
+- **`entity_classifications`** — controlled richer vocabulary
+  (`CLASSIFICATION_VOCABULARY`) that resolves the kind drift without growing
+  the renderer `entities.kind` enum (`idea→concept`, `discovery→event`,
+  plus document/work/law/treaty/technology/movement/…).
+- **`entity_time_associations`** — typed multi-role entity↔period milestones
+  (conceived/patented/demonstrated/commercialised/adopted/declined/replaced…);
+  keeps `entities.primaryPeriodId` for renderer compatibility. Evidence via
+  `claims.subjectType='time_association'`.
+- **`relationship_type_registry`** — controlled, growable relationship types
+  (inverse wording, directionality, allowed source/target kinds, cycle
+  policy). `relationships.typeKey` FK-references it; the legacy `type` enum is
+  now nullable (backfilled; 13 builtins seeded). New columns on
+  `relationships`: `typeKey`, `assertionClass`, `contextPlaceId`.
+- Additive columns: `claims.assertionClass`, `entities.graphStatus /
+  freshnessCheckedAt / supersededById / mergedIntoId / revision`. New enum
+  value `claim_subject_type='time_association'`.
+
+### Research staging (never public)
+
+`research_runs`, `research_jobs`, `research_packages` (with an immutable
+`envelope` JSON snapshot + `submissionHash` for idempotency),
+`research_package_items` (normalized, section-tagged, `held`/`decision`
+per-item), `qa_results`, `qa_flags`, `package_decisions`.
+
+### Adding types the scalable way
+
+- **Relationship type:** INSERT a row into `relationship_type_registry`
+  (data, no code migration). The audit flags an unregistered `typeKey`.
+- **Classification:** add to `CLASSIFICATION_VOCABULARY` in
+  `validation/graph-ext.ts` (no DB enum change).
+
+### New integrity audit checks (`npm run db:audit`)
+
+- `unknown_relationship_type_key` — a `typeKey` not in the registry (error);
+- `assertion_class_violation` — a `verified`/`corroborated` claim whose
+  assertion class is `inference`/`forecast` (error).
+
+### Migration 0003 — integrity constraints (Cycle 8A correction pass)
+
+- `relationships` CHECK: `type IS NOT NULL OR type_key IS NOT NULL` (no
+  untyped relationships); repository + validator guards mirror it; audit adds
+  `relationship_missing_type`.
+- `research_jobs`: partial UNIQUE index on `dedupe_key` for active statuses
+  (`queued/claimed/researching/submitted`) — no duplicate active job per topic,
+  even concurrently. Manual capture goes through `captureManualJob`.
+- `package_decisions`: UNIQUE(`package_id`) — exactly one final decision per
+  package (backs the replay/conflict guard in `decidePackage`).
+- Human decision value `merge`→`mark_duplicate` and package status
+  `merged`→`marked_duplicate`: the shallow operation only RECORDS a duplicate
+  (it does not deep-merge/reparent), renamed so it cannot be mistaken for one.
