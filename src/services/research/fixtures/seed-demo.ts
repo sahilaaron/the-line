@@ -45,7 +45,8 @@ export async function seedResearchDemo(db: Db): Promise<SeedDemoResult> {
   const packages = await db.query.researchPackages.findMany();
   const steamExisting = packages.find((p) => p.centralSlug === 'steam-engine');
   const heroExisting = packages.find((p) => p.centralSlug === 'hero-engine');
-  if (steamExisting && heroExisting) {
+  const studioExisting = packages.find((p) => p.centralSlug === 'studio-demo-engine');
+  if (steamExisting && heroExisting && studioExisting) {
     return { status: 'already_seeded', steamPackageId: steamExisting.id, heroPackageId: heroExisting.id };
   }
 
@@ -89,6 +90,24 @@ export async function seedResearchDemo(db: Db): Promise<SeedDemoResult> {
       const { package: dupPkg } = await submitPackage(db, dupClaim.job.id, HERO_ENVELOPE, { submittedBy: 'seed' });
       await recordQa(db, dupPkg.id, { recommendation: 'duplicate', summary: 'Looks like the Aeolipile.', flags: [] });
       heroPackageId = dupPkg.id;
+    }
+  }
+
+  // A THIRD, ISOLATED package for the graph EDIT scenario, so the approval and
+  // edit e2e specs never depend on shared mutation or file order.
+  if (!studioExisting) {
+    const editableEnvelope = {
+      ...STEAM_ENGINE_ENVELOPE,
+      entities: STEAM_ENGINE_ENVELOPE.entities.map((e) =>
+        e.role === 'central' ? { ...e, slug: 'studio-demo-engine', label: 'Studio demo engine (provisional record)' } : e,
+      ),
+    };
+    await captureManualJob(db, { title: 'Studio demo engine (provisional record)', priority: 30 });
+    const stClaim = await claimNextJob(db, run.id, { worker: 'seed' });
+    if (stClaim.job) {
+      const { package: stPkg } = await submitPackage(db, stClaim.job.id, editableEnvelope, { submittedBy: 'seed' });
+      await recordQa(db, stPkg.id, STEAM_ENGINE_QA);
+      void stPkg;
     }
   }
 
