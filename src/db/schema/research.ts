@@ -169,10 +169,15 @@ export const researchPackageItems = pgTable(
     matchStatus: text('match_status'),
     /** Marked synthetic -> NEVER promotable into canonical rows. */
     isSynthetic: boolean('is_synthetic').notNull().default(false),
+    /** Effective hold = humanHeld OR qaHeld. Maintained on every hold write and
+     * kept consistent by a CHECK. Retained so existing reads of `held`
+     * (promotion, approve_with_holds) still mean "excluded by default". */
     held: boolean('held').notNull().default(false),
-    /** Cycle 8B correction: hold provenance so QA reruns clear only QA-derived
-     * holds and never a human hold. 'human' | 'qa' | null (not held). */
-    holdSource: text('hold_source'),
+    /** Cycle 8B v3 correction: INDEPENDENT hold provenance. A human hold and a
+     * current QA hold can coexist; removing one preserves the other. A passing
+     * QA rerun clears qaHeld only; a human unhold clears humanHeld only. */
+    humanHeld: boolean('human_held').notNull().default(false),
+    qaHeld: boolean('qa_held').notNull().default(false),
     decision: researchItemDecisionEnum('decision').notNull().default('pending'),
     decidedAt: timestamp('decided_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -181,6 +186,8 @@ export const researchPackageItems = pgTable(
     index('research_package_items_pkg_idx').on(t.packageId),
     index('research_package_items_section_idx').on(t.packageId, t.section),
     unique('research_package_items_ref_unique').on(t.packageId, t.section, t.localRef),
+    // held must always equal (humanHeld OR qaHeld): no invalid hold state.
+    check('research_package_items_held_consistent', sql`${t.held} = (${t.humanHeld} OR ${t.qaHeld})`),
   ],
 );
 
