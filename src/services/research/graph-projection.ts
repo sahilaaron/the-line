@@ -7,8 +7,9 @@
  * match state are surfaced as machine-readable node/edge states (never
  * colour-only in the UI).
  */
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import {
+  entities,
   qaFlags,
   researchPackageItems,
   researchPackages,
@@ -32,8 +33,11 @@ export interface GraphNode {
   primaryState: NodeState;
   matchEntityId: string | null;
   matchStatus: string | null;
+  matchSlug: string | null;
+  matchLabel: string | null;
   synthetic: boolean;
   held: boolean;
+  holdSource: string | null;
   qaFlagged: boolean;
   decision: string;
   year: number | null;
@@ -65,10 +69,15 @@ export interface GraphEdge {
   payload: Record<string, unknown>;
 }
 
+export interface PackageQaFlag {
+  section: string | null; localRef: string | null; severity: string; category: string | null;
+  explanation: string; state: string; correctiveSource: string | null;
+}
 export interface PackageGraph {
   package: { id: string; centralLabel: string; centralSlug: string; status: string; lastEditedAt: string | null };
   nodes: GraphNode[];
   edges: GraphEdge[];
+  flags: PackageQaFlag[];
   facets: { kinds: string[]; categories: string[] };
 }
 
@@ -87,6 +96,9 @@ export async function projectPackageGraph(db: Db, packageId: string): Promise<Pa
   const flags = await db.query.qaFlags.findMany({ where: eq(qaFlags.packageId, packageId) });
   const registry = await listRelationshipTypes(db);
   const regByKey = new Map(registry.map((r) => [r.key, r]));
+  const matchIds = [...new Set(items.filter((i) => i.section === 'entity' && i.matchEntityId).map((i) => i.matchEntityId!))];
+  const matchedEntities = matchIds.length ? await db.query.entities.findMany({ where: inArray(entities.id, matchIds) }) : [];
+  const matchById = new Map(matchedEntities.map((e) => [e.id, e]));
   const flaggedKeys = new Set(flags.filter((f) => f.targetSection && f.targetRef).map((f) => `${f.targetSection} ${f.targetRef}`));
 
   const entityItems = items.filter((i) => i.section === 'entity').sort((a, b) => a.localRef.localeCompare(b.localRef));
@@ -132,7 +144,9 @@ export async function projectPackageGraph(db: Db, packageId: string): Promise<Pa
     return {
       id: it.localRef, itemId: it.id, localRef: it.localRef, label: p.label ?? it.localRef, kind, role,
       states, primaryState, matchEntityId: it.matchEntityId, matchStatus: it.matchStatus,
-      synthetic: it.isSynthetic, held: it.held, qaFlagged, decision: it.decision,
+      matchSlug: it.matchEntityId ? matchById.get(it.matchEntityId)?.slug ?? null : null,
+      matchLabel: it.matchEntityId ? matchById.get(it.matchEntityId)?.label ?? null : null,
+      synthetic: it.isSynthetic, held: it.held, holdSource: it.holdSource, qaFlagged, decision: it.decision,
       year: yearByRef.get(it.localRef) ?? null, x, y, payload: it.payload,
     };
   });
@@ -165,6 +179,7 @@ export async function projectPackageGraph(db: Db, packageId: string): Promise<Pa
   return {
     package: { id: pkg.id, centralLabel: pkg.centralLabel, centralSlug: pkg.centralSlug, status: pkg.status, lastEditedAt: pkg.lastEditedAt ? pkg.lastEditedAt.toISOString() : null },
     nodes, edges,
+    flags: flags.map((f) => ({ section: f.targetSection, localRef: f.targetRef, severity: f.severity, category: f.category, explanation: f.explanation, state: f.state, correctiveSource: f.correctiveSource })),
     facets: { kinds: [...kinds].sort(), categories: [...categories].sort() },
   };
 }

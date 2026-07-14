@@ -80,11 +80,13 @@ async function main() {
         activeRuns(db),
       ]);
       const openJobs = await db.query.researchJobs.findMany();
+      const allPkgs = await db.query.researchPackages.findMany();
+      const pkgByJob = new Map(allPkgs.map((p) => [p.jobId, p.status]));
       console.log(JSON.stringify({
         activeRuns: runs.map((r) => ({ runId: r.id, status: r.status, batchLimit: r.batchLimit })),
         activeAgents: activeAgentCount(openJobs, now),
         jobs: byStatus,
-        displayStates: openJobs.map((j) => ({ jobId: j.id, title: j.centralTitle, display: jobDisplayState(j, undefined, now) })),
+        displayStates: openJobs.map((j) => ({ jobId: j.id, title: j.centralTitle, display: jobDisplayState(j, pkgByJob.get(j.id), now) })),
         queuedByOrigin: byOrigin,
         packagesAwaitingReview: awaitingReview.length,
       }, null, 2));

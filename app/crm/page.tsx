@@ -23,6 +23,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       db.select().from(entities).where(eq(entities.isSynthetic, false)),
       db.select().from(relationships).where(eq(relationships.isSynthetic, false)),
     ]);
+    // Synthetic content is EXCLUDED from every normal reviewer view above.
+    // Developer mode (?dev=1) actually changes filtering: it reveals a synthetic
+    // count that is otherwise not queried/shown. No synthetic item is ever
+    // promotable into the canonical graph.
+    const syntheticEntities = showDev ? (await db.select().from(entities).where(eq(entities.isSynthetic, true))).length : 0;
     const activeRun = runs.find((r) => r.status === 'active' || r.status === 'stopping');
     const awaitingAgents = jobs.filter((j) => j.status === 'queued').length;
     const agents = activeAgentCount(jobs, now);
@@ -59,6 +64,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
           <Stat n={failedJobs.length} l="failed jobs" />
           <Stat n={canonical.length} l="canonical entities" />
           <Stat n={rels.length} l="canonical relationships" />
+          {showDev && <Stat n={syntheticEntities} l="synthetic (dev only)" />}
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: '0.9rem', marginTop: '0.4rem' }}>

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { getDevDb } from '@/src/db/client/dev';
 import { researchJobs, researchRuns } from '@/src/db/schema';
-import { desc, inArray } from 'drizzle-orm';
+import { asc, desc, inArray } from 'drizzle-orm';
 import { jobDisplayState, activeAgentCount } from '@/src/services/research/display-state';
 import { researchAgentPrompt, qaAgentPrompt, claimCommand } from '@/src/services/research/prompts';
 import { stopRunAction, editPriorityAction, cancelJobAction, requeueJobAction } from '../actions';
@@ -22,7 +22,7 @@ export default async function QueuePage() {
   try {
     const runs = await db.query.researchRuns.findMany({ where: inArray(researchRuns.status, ['active', 'stopping']), orderBy: [desc(researchRuns.startedAt)] });
     activeRun = runs[0];
-    jobs = await db.query.researchJobs.findMany({ orderBy: [researchJobs.priority, researchJobs.sequence], limit: 100 });
+    jobs = await db.query.researchJobs.findMany({ orderBy: [desc(researchJobs.priority), asc(researchJobs.sequence)], limit: 100 });
     const pkgs = await db.query.researchPackages.findMany();
     pkgByJob = new Map(pkgs.map((p) => [p.jobId, p.status]));
   } catch {
@@ -36,7 +36,7 @@ export default async function QueuePage() {
       <AutoRefresh />
       <Link href="/crm" className={s.back}>← Dashboard</Link>
       <h1 className={s.h}>Queue &amp; Runs</h1>
-      <p className={s.sub}>Research is run MANUALLY through Claude CoWork. Opening a batch does not launch Claude — it opens a queue that agents you start will claim.</p>
+      <p className={s.sub}>Research is run MANUALLY through Claude CoWork. Opening a batch does not launch Claude. Adding a topic only creates a queued job (<b>Awaiting Agent(s)</b>); a Claude CoWork agent you start must claim it and perform the research.</p>
 
       {activeRun ? (
         <div className={s.card}>
