@@ -20,6 +20,8 @@ import { submitPackage } from '../services/research/submit';
 import { recordQa } from '../services/research/qa';
 import { countJobsByStatus, countOpenJobsByOrigin, listPackagesByStatus } from '../db/repositories/research';
 import { deterministicDiscoveryAdapter } from '../services/research/discovery';
+import { activeRuns, claimNextForActiveRun, beginJob, heartbeatJob, releaseJob, failJob } from '../services/research/queue-admin';
+import { jobDisplayState, activeAgentCount } from '../services/research/display-state';
 
 function arg(flag: string): string | undefined {
   const i = process.argv.indexOf(flag);
@@ -70,16 +72,62 @@ async function main() {
       break;
     }
     case 'status': {
-      const [byStatus, byOrigin, awaitingReview] = await Promise.all([
+      const now = new Date();
+      const [byStatus, byOrigin, awaitingReview, runs] = await Promise.all([
         countJobsByStatus(db),
         countOpenJobsByOrigin(db),
         listPackagesByStatus(db, ['submitted', 'qa_pending', 'qa_complete', 'in_review']),
+        activeRuns(db),
       ]);
-      console.log(JSON.stringify({ jobs: byStatus, queuedByOrigin: byOrigin, packagesAwaitingReview: awaitingReview.length }, null, 2));
+      const openJobs = await db.query.researchJobs.findMany();
+      console.log(JSON.stringify({
+        activeRuns: runs.map((r) => ({ runId: r.id, status: r.status, batchLimit: r.batchLimit })),
+        activeAgents: activeAgentCount(openJobs, now),
+        jobs: byStatus,
+        displayStates: openJobs.map((j) => ({ jobId: j.id, title: j.centralTitle, display: jobDisplayState(j, undefined, now) })),
+        queuedByOrigin: byOrigin,
+        packagesAwaitingReview: awaitingReview.length,
+      }, null, 2));
+      break;
+    }
+    case 'active-runs': {
+      const runs = await activeRuns(db);
+      console.log(JSON.stringify(runs.map((r) => ({ runId: r.id, status: r.status, batchLimit: r.batchLimit, claimed: r.claimedCount, completed: r.completedCount })), null, 2));
+      break;
+    }
+    case 'claim-next-active': {
+      const res = await claimNextForActiveRun(db, { worker: arg('--worker') ?? 'cowork' });
+      if (res.ambiguousRunIds && res.ambiguousRunIds.length > 1) {
+        console.error('[research:agent] multiple active runs — choose one with `claim --run <id>`:');
+        for (const id of res.ambiguousRunIds) console.error('  ' + id);
+        await closeDevClient();
+        process.exit(2);
+      }
+      console.log(JSON.stringify(res.job ? { runId: res.runId, jobId: res.job.id, title: res.job.centralTitle, origin: res.job.origin } : { job: null, reason: res.reason }, null, 2));
+      break;
+    }
+    case 'begin': {
+      const j = await beginJob(db, arg('--job')!, arg('--worker') ?? 'cowork');
+      console.log(JSON.stringify({ jobId: j.id, status: j.status, leaseExpiresAt: j.leaseExpiresAt }, null, 2));
+      break;
+    }
+    case 'heartbeat': {
+      const j = await heartbeatJob(db, arg('--job')!, arg('--worker') ?? 'cowork');
+      console.log(JSON.stringify({ jobId: j.id, leaseExpiresAt: j.leaseExpiresAt }, null, 2));
+      break;
+    }
+    case 'release': {
+      const j = await releaseJob(db, arg('--job')!);
+      console.log(JSON.stringify({ jobId: j.id, status: j.status }, null, 2));
+      break;
+    }
+    case 'fail': {
+      const j = await failJob(db, arg('--job')!, arg('--reason') ?? 'unspecified');
+      console.log(JSON.stringify({ jobId: j.id, status: j.status, lastError: j.lastError }, null, 2));
       break;
     }
     default:
-      console.log('commands: create-run | claim | submit | qa | status');
+      console.log('commands: create-run | claim | claim-next-active | begin | heartbeat | release | fail | active-runs | submit | qa | status');
   }
   await closeDevClient();
 }

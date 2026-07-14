@@ -14,6 +14,7 @@ export default function CrmLayout({ children }: { children: ReactNode }) {
         <nav className={s.nav}>
           <Link href="/crm">Dashboard</Link>
           <Link href="/crm/queue">Queue &amp; Runs</Link>
+          <Link href="/crm/vocabulary">Vocabulary</Link>
         </nav>
         <span className={s.muted} style={{ marginLeft: 'auto', fontSize: '0.72rem' }}>
           local · internal · not production-secure

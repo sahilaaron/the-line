@@ -138,3 +138,29 @@ export async function correctMatchAction(formData: FormData) {
   if (itemId) await correctCanonicalMatch(db, itemId, matchEntityId, matchStatus, 'Sahil');
   REVALIDATE(pkgId);
 }
+
+/* ---- Cycle 8B: honest queue management actions ---- */
+import { editJobPriority, cancelJob, requeueJob } from '@/src/services/research/queue-admin';
+
+export async function editPriorityAction(formData: FormData) {
+  const db = getDevDb();
+  const jobId = String(formData.get('jobId') ?? '');
+  const priority = Number(formData.get('priority') ?? 0);
+  if (jobId) await editJobPriority(db, jobId, priority);
+  revalidatePath('/crm/queue');
+  revalidatePath('/crm');
+}
+export async function cancelJobAction(formData: FormData) {
+  const db = getDevDb();
+  const jobId = String(formData.get('jobId') ?? '');
+  if (jobId) await cancelJob(db, jobId);
+  revalidatePath('/crm/queue');
+  revalidatePath('/crm');
+}
+export async function requeueJobAction(formData: FormData) {
+  const db = getDevDb();
+  const jobId = String(formData.get('jobId') ?? '');
+  if (jobId) await requeueJob(db, jobId);
+  revalidatePath('/crm/queue');
+  revalidatePath('/crm');
+}
