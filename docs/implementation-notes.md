@@ -1049,3 +1049,35 @@ service hardening):
 New tests: `corrections.test.ts` (12) + relationship-typing pure tests cover
 every repaired invariant; the Steam Engine proof and all prior suites remain
 green.
+
+### Cycle 8A correction pass 2 (Opus, second Codex audit)
+
+Codex's second audit added three adversarial tests (all now permanent) plus
+refinements:
+
+- **Semantic decision fingerprint.** Decision replay is compared by a canonical
+  fingerprint over decision + reviewer + instructions + reason + resolved
+  duplicate target + sorted composite held-item set. An exact replay is a
+  no-op; any changed field (e.g. a different `mark_duplicate` target, changed
+  return instructions or rejection reason) is a conflicting decision and is
+  rejected. Reordered identical `heldItems` are still an idempotent replay.
+- **Held-item identity validation.** `heldItems` are only accepted for
+  `approve_with_holds`; malformed and duplicate identities are rejected by the
+  validator; a held identity that does not name a real package item fails and
+  rolls back the whole decision.
+- **Registry duplicate auditing.** The audit's duplicate-edge key now uses the
+  EFFECTIVE type (`typeKey ?? type`) and canonicalizes endpoints for symmetric
+  registry types, so two distinct registry types between the same entities are
+  no longer falsely reported and a reversed symmetric duplicate is detected.
+- **QaOutcome** returns composite `heldItems: {section, localRef}[]` (the CLI
+  output too), not an ambiguous `heldRefs: string[]`.
+- **CRM** `marked_duplicate` terminal state: the obsolete `merged` check is
+  gone; the page shows "Decision recorded", hides the form, and shows the
+  duplicate target clearly ("duplicate target" wording); removed a useless
+  `researchPackages.findFirst()` in `decisionAction`.
+- **Migration simplification.** Migration 0002 now creates the final enum
+  values (`mark_duplicate`/`marked_duplicate`) directly; 0003 is limited to the
+  new integrity constraints/indexes — no data-sensitive enum drop/recreate.
+
+New/updated tests: `corrections.test.ts` (21) + held-rule pure tests; Steam
+Engine proof and all prior suites remain green.

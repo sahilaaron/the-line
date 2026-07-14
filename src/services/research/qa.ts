@@ -19,7 +19,7 @@ import { assertTransition, PACKAGE_TRANSITIONS } from './state-machine';
 
 export interface QaOutcome {
   result: QaResult;
-  heldRefs: string[];
+  heldItems: { section: string; localRef: string }[];
 }
 
 export async function recordQa(db: Db, packageId: string, rawContract: unknown): Promise<QaOutcome> {
@@ -57,7 +57,7 @@ export async function recordQa(db: Db, packageId: string, rawContract: unknown):
       })
       .returning();
 
-    const heldRefs: string[] = [];
+    const heldItems: { section: string; localRef: string }[] = [];
     for (const flag of contract.flags) {
       await tx.insert(qaFlags).values({
         qaResultId: result.id,
@@ -82,8 +82,8 @@ export async function recordQa(db: Db, packageId: string, rawContract: unknown):
               eq(researchPackageItems.localRef, flag.targetRef),
             ),
           )
-          .returning({ ref: researchPackageItems.localRef });
-        if (held) heldRefs.push(held.ref);
+          .returning({ section: researchPackageItems.section, ref: researchPackageItems.localRef });
+        if (held) heldItems.push({ section: held.section, localRef: held.ref });
       }
     }
 
@@ -95,6 +95,6 @@ export async function recordQa(db: Db, packageId: string, rawContract: unknown):
         .where(eq(researchPackages.id, packageId));
     }
 
-    return { result, heldRefs };
+    return { result, heldItems };
   });
 }

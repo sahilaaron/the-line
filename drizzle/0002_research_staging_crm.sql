@@ -2,7 +2,7 @@ CREATE TYPE "public"."assertion_class" AS ENUM('recorded_fact', 'interpretation'
 CREATE TYPE "public"."entity_alias_type" AS ENUM('alias', 'historical_name', 'spelling', 'abbreviation', 'translation');--> statement-breakpoint
 CREATE TYPE "public"."entity_graph_status" AS ENUM('frontier', 'draft_stub', 'candidate', 'canonical_incomplete', 'canonical_complete', 'stale', 'superseded', 'archived');--> statement-breakpoint
 CREATE TYPE "public"."external_id_scheme" AS ENUM('wikipedia', 'wikidata', 'viaf', 'isni', 'doi', 'geonames', 'other');--> statement-breakpoint
-CREATE TYPE "public"."human_package_decision" AS ENUM('approve', 'approve_with_holds', 'return', 'merge', 'reject');--> statement-breakpoint
+CREATE TYPE "public"."human_package_decision" AS ENUM('approve', 'approve_with_holds', 'return', 'mark_duplicate', 'reject');--> statement-breakpoint
 CREATE TYPE "public"."qa_flag_severity" AS ENUM('info', 'minor', 'major', 'critical');--> statement-breakpoint
 CREATE TYPE "public"."qa_flag_state" AS ENUM('pass', 'hold', 'correction', 'duplicate', 'insufficient_evidence');--> statement-breakpoint
 CREATE TYPE "public"."qa_recommendation" AS ENUM('pass', 'hold', 'correct', 'duplicate', 'insufficient_evidence');--> statement-breakpoint
@@ -11,7 +11,7 @@ CREATE TYPE "public"."research_item_decision" AS ENUM('pending', 'accepted', 'he
 CREATE TYPE "public"."research_job_origin" AS ENUM('manual', 'returned_correction', 'frontier', 'random_discovery');--> statement-breakpoint
 CREATE TYPE "public"."research_job_status" AS ENUM('queued', 'claimed', 'researching', 'submitted', 'completed', 'returned', 'failed', 'cancelled');--> statement-breakpoint
 CREATE TYPE "public"."research_package_section" AS ENUM('entity', 'time', 'relationship', 'claim', 'source', 'media', 'question', 'next_entity');--> statement-breakpoint
-CREATE TYPE "public"."research_package_status" AS ENUM('draft', 'submitted', 'qa_pending', 'qa_complete', 'in_review', 'approved', 'approved_with_holds', 'returned', 'merged', 'rejected', 'promoted');--> statement-breakpoint
+CREATE TYPE "public"."research_package_status" AS ENUM('draft', 'submitted', 'qa_pending', 'qa_complete', 'in_review', 'approved', 'approved_with_holds', 'returned', 'marked_duplicate', 'rejected', 'promoted');--> statement-breakpoint
 CREATE TYPE "public"."research_run_status" AS ENUM('active', 'stopping', 'stopped', 'completed', 'failed');--> statement-breakpoint
 CREATE TYPE "public"."time_association_role" AS ENUM('existence', 'born', 'died', 'active', 'conceived', 'invented', 'patented', 'demonstrated', 'published', 'founded', 'dissolved', 'commercialised', 'adopted', 'declined', 'replaced', 'occurred', 'other');--> statement-breakpoint
 ALTER TYPE "public"."claim_subject_type" ADD VALUE 'time_association';--> statement-breakpoint

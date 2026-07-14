@@ -54,10 +54,29 @@ export async function runIntegrityAudit(db: Db): Promise<AuditReport> {
     if (n > 1) errors.push({ code: 'duplicate_entity_slug', message: `slug "${slug}" used by ${n} entities` });
   }
 
-  // --- duplicate edges (source,target,type) — defense in depth vs the unique constraint ---
+  // --- relationship-type registry (loaded once for the checks below) ---
+  const registry = await db.query.relationshipTypeRegistry.findMany();
+  const registryKeys = new Set(registry.map((r) => r.key));
+  const acyclicKeys = new Set<string>([
+    ...ACYCLIC_EXPECTED_RELATIONSHIP_TYPES,
+    ...registry.filter((r) => r.isAcyclic).map((r) => r.key),
+  ]);
+  const symmetricKeys = new Set(
+    registry.filter((r) => r.directionality === 'symmetric').map((r) => r.key),
+  );
+  /** Effective type = registry typeKey when present, else the legacy enum. */
+  const relTypeOf = (r: (typeof allRelationships)[number]): string | null => r.typeKey ?? r.type ?? null;
+
+  // --- duplicate edges — keyed by EFFECTIVE type (typeKey ?? type). For a
+  // symmetric type, endpoints are canonicalized so a reversed instance of the
+  // same relationship is detected as a duplicate. ---
   const edgeCounts = new Map<string, number>();
   for (const r of allRelationships) {
-    const key = `${r.sourceEntityId}|${r.targetEntityId}|${r.type}`;
+    const effType = relTypeOf(r);
+    let a = r.sourceEntityId;
+    let b = r.targetEntityId;
+    if (effType != null && symmetricKeys.has(effType) && a > b) [a, b] = [b, a];
+    const key = `${a}|${b}|${effType}`;
     edgeCounts.set(key, (edgeCounts.get(key) ?? 0) + 1);
   }
   for (const [key, n] of edgeCounts) {
@@ -187,15 +206,6 @@ export async function runIntegrityAudit(db: Db): Promise<AuditReport> {
       warnings.push({ code: 'dense_node', message: `entity ${entityId} has degree ${d} (> ${DENSE_NODE_THRESHOLD})`, subjectId: entityId });
     }
   }
-
-  // --- Cycle 8A: relationship registry integrity (load once) ---
-  const registry = await db.query.relationshipTypeRegistry.findMany();
-  const registryKeys = new Set(registry.map((r) => r.key));
-  const acyclicKeys = new Set<string>([
-    ...ACYCLIC_EXPECTED_RELATIONSHIP_TYPES,
-    ...registry.filter((r) => r.isAcyclic).map((r) => r.key),
-  ]);
-  const relTypeOf = (r: (typeof allRelationships)[number]): string | null => r.typeKey ?? r.type ?? null;
 
   // Every relationship must carry a type (enum) or a registry typeKey.
   for (const r of allRelationships) {

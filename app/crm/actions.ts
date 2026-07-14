@@ -65,7 +65,5 @@ export async function decisionAction(formData: FormData) {
   });
   revalidatePath('/crm');
   revalidatePath(`/crm/packages/${packageId}`);
-  const promoted = await db.query.researchPackages.findFirst();
-  void promoted;
   redirect(`/crm/packages/${packageId}`);
 }

@@ -10,7 +10,7 @@ import {
 } from './state-machine';
 import { orderJobs, selectNextJob, isClaimable } from './queue';
 import type { ResearchJob } from '../../db/schema';
-import { researchPackageEnvelopeSchema } from '../../db/validation/research';
+import { researchPackageEnvelopeSchema, humanDecisionSchema } from '../../db/validation/research';
 import { relationshipCreateSchema } from '../../db/validation/relationship';
 import { STEAM_ENGINE_ENVELOPE } from './fixtures/steam-engine';
 
@@ -138,5 +138,29 @@ describe('relationship validation requires a type or a typeKey', () => {
   });
   it('accepts a legacy enum-type relationship', () => {
     expect(relationshipCreateSchema.safeParse({ ...base, type: 'influenced' }).success).toBe(true);
+  });
+});
+
+describe('human decision validation (held-item rules)', () => {
+  it('rejects heldItems on a decision other than approve_with_holds', () => {
+    expect(humanDecisionSchema.safeParse({ decision: 'approve', heldItems: [{ section: 'entity', localRef: 'x' }] }).success).toBe(false);
+    expect(humanDecisionSchema.safeParse({ decision: 'reject', reason: 'x', heldItems: [{ section: 'entity', localRef: 'x' }] }).success).toBe(false);
+  });
+  it('rejects duplicate held identities', () => {
+    const r = humanDecisionSchema.safeParse({
+      decision: 'approve_with_holds',
+      heldItems: [{ section: 'entity', localRef: 'x' }, { section: 'entity', localRef: 'x' }],
+    });
+    expect(r.success).toBe(false);
+  });
+  it('rejects a malformed held identity (empty localRef / bad section)', () => {
+    expect(humanDecisionSchema.safeParse({ decision: 'approve_with_holds', heldItems: [{ section: 'entity', localRef: '' }] }).success).toBe(false);
+    expect(humanDecisionSchema.safeParse({ decision: 'approve_with_holds', heldItems: [{ section: 'nope', localRef: 'x' }] }).success).toBe(false);
+  });
+  it('accepts distinct held identities across sections for approve_with_holds', () => {
+    expect(humanDecisionSchema.safeParse({
+      decision: 'approve_with_holds',
+      heldItems: [{ section: 'entity', localRef: 'x' }, { section: 'claim', localRef: 'x' }],
+    }).success).toBe(true);
   });
 });

@@ -130,6 +130,16 @@ by default) so the reviewer sees it flagged. QA never promotes.
   "duplicateOfSlug": "…" }                    // required for mark_duplicate (records a duplicate; NOT a deep merge)
 ```
 
+`heldItems` are `{section, localRef}` pairs and are ONLY valid for
+`approve_with_holds` — each must name a real item in the package (nonexistent,
+duplicate, or malformed identities are rejected and roll everything back).
+
+**One final decision per package.** A replay is compared by a canonical
+fingerprint over ALL semantic fields (decision, reviewer, instructions, reason,
+resolved duplicate target, and the held-item SET regardless of order): an exact
+semantic replay is a harmless no-op, and ANY changed field is a conflicting
+decision that is rejected.
+
 The per-item `decision` set here is **authoritative** for promotion:
 `approve` accepts every item (reviewer overrides QA holds);
 `approve_with_holds` accepts all except the reviewer's holds (composite {section, localRef}) plus QA-held items. `mark_duplicate` records that the subject duplicates an existing canonical entity — it does NOT deep-merge/reparent data (a later dedicated cycle).

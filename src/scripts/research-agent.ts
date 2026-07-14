@@ -66,7 +66,7 @@ async function main() {
       if (!pkgId || !file) throw new Error('qa requires --package <pkgId> --file <path>');
       const contract = JSON.parse(fs.readFileSync(file, 'utf8'));
       const res = await recordQa(db, pkgId, contract);
-      console.log(JSON.stringify({ qaResultId: res.result.id, recommendation: res.result.recommendation, heldRefs: res.heldRefs }, null, 2));
+      console.log(JSON.stringify({ qaResultId: res.result.id, recommendation: res.result.recommendation, heldItems: res.heldItems }, null, 2));
       break;
     }
     case 'status': {

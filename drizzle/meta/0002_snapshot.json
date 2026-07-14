@@ -4372,7 +4372,7 @@
         "approve",
         "approve_with_holds",
         "return",
-        "merge",
+        "mark_duplicate",
         "reject"
       ]
     },
@@ -4527,7 +4527,7 @@
         "approved",
         "approved_with_holds",
         "returned",
-        "merged",
+        "marked_duplicate",
         "rejected",
         "promoted"
       ]

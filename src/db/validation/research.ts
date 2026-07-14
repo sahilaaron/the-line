@@ -343,6 +343,18 @@ export const humanDecisionSchema = z
       ctx.addIssue({ code: 'custom', path: ['instructions'], message: 'return requires correction instructions' });
     if (d.decision === 'reject' && !d.reason)
       ctx.addIssue({ code: 'custom', path: ['reason'], message: 'reject requires a reason' });
+    // heldItems only make sense for approve_with_holds; elsewhere they would be
+    // silently ignored — reject them so the intent can't be lost.
+    if (d.decision !== 'approve_with_holds' && d.heldItems.length > 0)
+      ctx.addIssue({ code: 'custom', path: ['heldItems'], message: `heldItems are only valid for approve_with_holds (not ${d.decision})` });
+    // no duplicate held identities
+    const seen = new Set<string>();
+    d.heldItems.forEach((h, i) => {
+      const key = `${h.section} ${h.localRef}`;
+      if (seen.has(key))
+        ctx.addIssue({ code: 'custom', path: ['heldItems', i], message: `duplicate held identity ${h.section}/${h.localRef}` });
+      seen.add(key);
+    });
   });
 export type HeldItem = z.infer<typeof heldItemSchema>;
 export type HumanDecisionInput = z.infer<typeof humanDecisionSchema>;

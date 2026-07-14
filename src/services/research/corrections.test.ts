@@ -14,6 +14,7 @@ import { relationships } from '../../db/schema';
 import { addTimeAssociation, registerRelationshipType } from '../../db/repositories/graph-ext';
 import { createJob } from '../../db/repositories/research';
 import { runIntegrityAudit } from '../../db/queries/audit';
+import { getPackageDetail } from '../../db/queries/crm';
 import { submitPackage } from './submit';
 import { decidePackage } from './decision';
 import { recordQa } from './qa';
@@ -202,5 +203,111 @@ describe('QA flag target validation', () => {
     // package-level flag (no target) is accepted
     const ok = await recordQa(db, pkg.id, { recommendation: 'pass', flags: [{ explanation: 'overall fine', state: 'pass' }] });
     expect(ok.result.recommendation).toBe('pass');
+  });
+});
+
+describe('semantic decision fingerprint replay (item 1)', () => {
+  it('a DIFFERENT mark_duplicate target is a conflict; the SAME target is an idempotent replay', async () => {
+    const { db } = await freshMigratedDb();
+    await createEntity(db, { slug: 'target-a', kind: 'concept', label: 'Target A' });
+    await createEntity(db, { slug: 'target-b', kind: 'concept', label: 'Target B' });
+    const { pkg } = await stage(db, envelope());
+    await decidePackage(db, pkg.id, { decision: 'mark_duplicate', duplicateOfSlug: 'target-a' });
+    await expect(decidePackage(db, pkg.id, { decision: 'mark_duplicate', duplicateOfSlug: 'target-b' })).rejects.toThrow(/conflicting/i);
+    const replay = await decidePackage(db, pkg.id, { decision: 'mark_duplicate', duplicateOfSlug: 'target-a' });
+    expect(replay.replayed).toBe(true);
+  });
+
+  it('different return instructions are a conflict', async () => {
+    const { db } = await freshMigratedDb();
+    const { pkg } = await stage(db, envelope());
+    await decidePackage(db, pkg.id, { decision: 'return', instructions: 'fix the dates' });
+    await expect(decidePackage(db, pkg.id, { decision: 'return', instructions: 'fix the sources' })).rejects.toThrow(/conflicting/i);
+    const replay = await decidePackage(db, pkg.id, { decision: 'return', instructions: 'fix the dates' });
+    expect(replay.replayed).toBe(true);
+  });
+
+  it('different rejection reason is a conflict', async () => {
+    const { db } = await freshMigratedDb();
+    const { pkg } = await stage(db, envelope());
+    await decidePackage(db, pkg.id, { decision: 'reject', reason: 'unsourced' });
+    await expect(decidePackage(db, pkg.id, { decision: 'reject', reason: 'duplicate' })).rejects.toThrow(/conflicting/i);
+  });
+
+  it('reordered identical heldItems remains an idempotent replay', async () => {
+    const { db } = await freshMigratedDb();
+    const { pkg } = await stage(db, envelope({
+      entities: [central,
+        { ref: 'x', role: 'connected', slug: 'x-node', label: 'X', kind: 'concept', classifications: ['concept'] },
+        { ref: 'y', role: 'connected', slug: 'y-node', label: 'Y', kind: 'concept', classifications: ['concept'] }],
+    }));
+    await decidePackage(db, pkg.id, { decision: 'approve_with_holds', heldItems: [{ section: 'entity', localRef: 'x' }, { section: 'entity', localRef: 'y' }] });
+    const replay = await decidePackage(db, pkg.id, { decision: 'approve_with_holds', heldItems: [{ section: 'entity', localRef: 'y' }, { section: 'entity', localRef: 'x' }] });
+    expect(replay.replayed).toBe(true);
+  });
+});
+
+describe('held-item identity validation (item 2)', () => {
+  it('a ghost held item fails and rolls back everything', async () => {
+    const { db } = await freshMigratedDb();
+    const { pkg } = await stage(db, envelope());
+    await expect(
+      decidePackage(db, pkg.id, { decision: 'approve_with_holds', heldItems: [{ section: 'relationship', localRef: 'ghost' }] }),
+    ).rejects.toThrow(/not an item in package/i);
+    expect((await db.query.packageDecisions.findMany()).length).toBe(0);
+    expect((await db.query.entities.findMany()).length).toBe(0);
+    const pkgNow = await db.query.researchPackages.findFirst();
+    expect(pkgNow!.status).toBe('submitted');
+  });
+});
+
+describe('registry duplicate auditing (item 3)', () => {
+  it('two distinct registry types between the same entities are NOT duplicates', async () => {
+    const { db } = await freshMigratedDb();
+    await registerRelationshipType(db, { key: 'rt_a', label: 'rt a', inverseLabel: 'rt a of' });
+    await registerRelationshipType(db, { key: 'rt_b', label: 'rt b', inverseLabel: 'rt b of' });
+    const a = await createEntity(db, { slug: 'ea', kind: 'concept', label: 'EA' });
+    const b = await createEntity(db, { slug: 'eb', kind: 'concept', label: 'EB' });
+    await addRelationship(db, { sourceEntityId: a.id, targetEntityId: b.id, typeKey: 'rt_a' });
+    await addRelationship(db, { sourceEntityId: a.id, targetEntityId: b.id, typeKey: 'rt_b' });
+    const report = await runIntegrityAudit(db);
+    expect(report.errors.filter((e) => e.code === 'duplicate_relationship').length).toBe(0);
+  });
+
+  it('the same EFFECTIVE registry relationship (type vs typeKey) is a duplicate', async () => {
+    const { db } = await freshMigratedDb();
+    const a = await createEntity(db, { slug: 'fa', kind: 'concept', label: 'FA' });
+    const b = await createEntity(db, { slug: 'fb', kind: 'concept', label: 'FB' });
+    // one legacy enum-typed, one registry-typed — same effective type 'part_of'.
+    await addRelationship(db, { sourceEntityId: a.id, targetEntityId: b.id, type: 'part_of' });
+    await addRelationship(db, { sourceEntityId: a.id, targetEntityId: b.id, typeKey: 'part_of' });
+    const report = await runIntegrityAudit(db);
+    expect(report.errors.some((e) => e.code === 'duplicate_relationship')).toBe(true);
+  });
+
+  it('detects a reversed SYMMETRIC duplicate', async () => {
+    const { db } = await freshMigratedDb();
+    await registerRelationshipType(db, { key: 'rt_sym', label: 'sym', inverseLabel: 'sym', directionality: 'symmetric' });
+    const a = await createEntity(db, { slug: 'ga', kind: 'concept', label: 'GA' });
+    const b = await createEntity(db, { slug: 'gb', kind: 'concept', label: 'GB' });
+    await addRelationship(db, { sourceEntityId: a.id, targetEntityId: b.id, typeKey: 'rt_sym' });
+    await addRelationship(db, { sourceEntityId: b.id, targetEntityId: a.id, typeKey: 'rt_sym' });
+    const report = await runIntegrityAudit(db);
+    expect(report.errors.some((e) => e.code === 'duplicate_relationship')).toBe(true);
+  });
+});
+
+describe('mark_duplicate CRM terminal state (item 4)', () => {
+  it('renders a terminal marked_duplicate state with the duplicate target', async () => {
+    const { db } = await freshMigratedDb();
+    await createEntity(db, { slug: 'canonical-orig', kind: 'concept', label: 'Canonical Original' });
+    const { pkg } = await stage(db, envelope());
+    await decidePackage(db, pkg.id, { decision: 'mark_duplicate', reviewer: 'Sahil', duplicateOfSlug: 'canonical-orig' });
+    const detail = await getPackageDetail(db, pkg.id);
+    expect(detail!.package.status).toBe('marked_duplicate');
+    expect(detail!.decisions[0].decision).toBe('mark_duplicate');
+    expect((detail!.decisions[0].decisionSnapshot as { duplicateOfSlug?: string }).duplicateOfSlug).toBe('canonical-orig');
+    // the duplicate's own central entity must NOT have been promoted
+    expect(await db.query.entities.findFirst({ where: (e, { eq }) => eq(e.slug, 'root-node') })).toBeUndefined();
   });
 });

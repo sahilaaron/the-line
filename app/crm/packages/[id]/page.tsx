@@ -17,7 +17,7 @@ export default async function PackageReview({ params }: { params: Promise<{ id: 
   const detail = await getPackageDetail(db, id).catch(() => undefined);
   if (!detail) return <p className={s.sub}>Package not found.</p>;
   const { package: pkg, sections, flags, decisions } = detail;
-  const decided = ['approved', 'approved_with_holds', 'returned', 'merged', 'rejected', 'promoted'].includes(pkg.status);
+  const decided = ['approved', 'approved_with_holds', 'returned', 'marked_duplicate', 'rejected', 'promoted'].includes(pkg.status);
   const central = sections.entity.find((e) => payload(e.payload).role === 'central');
 
   const flagFor = (section: string, ref: string) => flags.find((f) => f.targetSection === section && f.targetRef === ref);
@@ -29,7 +29,7 @@ export default async function PackageReview({ params }: { params: Promise<{ id: 
       <p className={s.sub}>
         <span data-testid="pkg-status" className={`${s.pill} ${pkg.status === 'promoted' ? s.ok : ''}`}>{pkg.status}</span>{' '}
         central match: {central ? String(central.matchStatus) : '—'}
-        {pkg.promotedEntityId && <> · <Link href={`/crm/entities/${pkg.centralSlug}`}>view canonical record →</Link></>}
+        {pkg.status === 'promoted' && pkg.promotedEntityId && <> · <Link href={`/crm/entities/${pkg.centralSlug}`}>view canonical record →</Link></>}
       </p>
 
       <form action={decisionAction}>
@@ -115,7 +115,7 @@ export default async function PackageReview({ params }: { params: Promise<{ id: 
         {!decided ? (
           <div className={s.card}>
             <div className={s.field} style={{ marginBottom: '0.6rem' }}>
-              <label>Correction instructions / rejection reason / merge target slug (as needed)</label>
+              <label>Correction instructions / rejection reason / duplicate target slug (as needed)</label>
               <input name="instructions" placeholder="return instructions" />
               <input name="reason" placeholder="rejection reason" style={{ marginTop: '0.35rem' }} />
               <input name="duplicateOfSlug" placeholder="duplicate-of slug (canonical)" style={{ marginTop: '0.35rem' }} />
@@ -132,9 +132,16 @@ export default async function PackageReview({ params }: { params: Promise<{ id: 
             </p>
           </div>
         ) : (
-          <div className={s.card}>
+          <div className={s.card} data-testid="decision-recorded">
             <b>Decision recorded.</b>{' '}
             {decisions[0] && <span className={s.muted}>{decisions[0].decision} by {decisions[0].reviewer ?? '—'}</span>}
+            {pkg.status === 'marked_duplicate' && (
+              <p className={s.muted} style={{ marginTop: '0.5rem' }} data-testid="duplicate-target">
+                Marked as a duplicate of{' '}
+                <b>{String((decisions[0]?.decisionSnapshot as { duplicateOfSlug?: string } | undefined)?.duplicateOfSlug ?? '—')}</b>
+                {' '}— this packagethis package&rsquo;s subject was NOT promotedrsquo;s subject was NOT promoted (duplicate recorded, not deep-merged).
+              </p>
+            )}
           </div>
         )}
       </form>

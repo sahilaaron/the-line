@@ -46,12 +46,31 @@ export interface DecisionResult {
 }
 
 const heldKey = (h: { section: string; localRef: string }) => `${h.section} ${h.localRef}`;
-function sameHeldSet(a: HeldItem[], b: HeldItem[]): boolean {
-  const sa = new Set(a.map(heldKey));
-  const sb = new Set(b.map(heldKey));
-  if (sa.size !== sb.size) return false;
-  for (const k of sa) if (!sb.has(k)) return false;
-  return true;
+
+/**
+ * Canonical fingerprint of ALL semantically relevant decision fields, so a
+ * replay is a no-op only when it is EXACTLY the same decision. Any changed
+ * field (decision, reviewer, instructions, reason, resolved duplicate target,
+ * or the composite held-item SET regardless of order) makes it a conflicting
+ * final decision.
+ */
+function decisionFingerprint(d: {
+  decision: string;
+  reviewer?: string | null;
+  instructions?: string | null;
+  reason?: string | null;
+  duplicateTargetId?: string | null;
+  heldItems: HeldItem[];
+}): string {
+  const held = d.heldItems.map(heldKey).sort();
+  return JSON.stringify({
+    decision: d.decision,
+    reviewer: d.reviewer ?? null,
+    instructions: d.instructions ?? null,
+    reason: d.reason ?? null,
+    duplicateTargetId: d.duplicateTargetId ?? null,
+    held,
+  });
 }
 
 export async function decidePackage(
@@ -65,17 +84,40 @@ export async function decidePackage(
     const pkg = await tx.query.researchPackages.findFirst({ where: eq(researchPackages.id, packageId) });
     if (!pkg) throw new Error(`package ${packageId} not found`);
 
+    // Resolve the duplicate target up front — needed for both the fingerprint
+    // and the first-decision path.
+    let duplicateOfId: string | undefined;
+    if (input.decision === 'mark_duplicate' && input.duplicateOfSlug) {
+      const target = await findEntityBySlug(tx, input.duplicateOfSlug);
+      if (!target) throw new Error(`mark_duplicate target "${input.duplicateOfSlug}" not found`);
+      duplicateOfId = target.id;
+    }
+    const inputFingerprint = decisionFingerprint({
+      decision: input.decision,
+      reviewer: input.reviewer,
+      instructions: input.instructions,
+      reason: input.reason,
+      duplicateTargetId: duplicateOfId,
+      heldItems: input.heldItems,
+    });
+
     // --- replay / conflict guard: at most one final decision per package ---
     const existing = (await tx.query.packageDecisions.findMany()).filter((d) => d.packageId === packageId);
     if (existing.length > 0) {
       const prev = existing[0];
-      const sameDecision =
-        prev.decision === input.decision && sameHeldSet((prev.heldItems ?? []) as HeldItem[], input.heldItems);
-      if (!sameDecision) {
-        throw new Error(`package ${packageId} already has a final decision (${prev.decision}); a conflicting decision (${input.decision}) is rejected`);
+      const prevFingerprint = decisionFingerprint({
+        decision: prev.decision,
+        reviewer: prev.reviewer,
+        instructions: prev.instructions,
+        reason: prev.reason,
+        duplicateTargetId: prev.mergeTargetEntityId,
+        heldItems: (prev.heldItems ?? []) as HeldItem[],
+      });
+      if (prevFingerprint !== inputFingerprint) {
+        throw new Error(`package ${packageId} already has a final decision (${prev.decision}); a conflicting decision is rejected`);
       }
-      // Identical replay. For approve*, ensure promotion completed (retry a
-      // previously-failed promotion); otherwise it's a no-op.
+      // Exact semantic replay. For approve*, ensure promotion completed (retry
+      // a previously-failed promotion); otherwise it's a no-op.
       let promotion: PromotionResult | undefined;
       if (input.decision === 'approve' || input.decision === 'approve_with_holds') {
         promotion = await promoteWithinTx(tx, packageId); // no-op if already promoted
@@ -94,11 +136,15 @@ export async function decidePackage(
 
     const items = (await tx.query.researchPackageItems.findMany()).filter((i) => i.packageId === packageId);
 
-    let duplicateOfId: string | undefined;
-    if (input.decision === 'mark_duplicate' && input.duplicateOfSlug) {
-      const target = await findEntityBySlug(tx, input.duplicateOfSlug);
-      if (!target) throw new Error(`mark_duplicate target "${input.duplicateOfSlug}" not found`);
-      duplicateOfId = target.id;
+    // Every held identity must name a real item in THIS package (duplicates and
+    // malformed identities are already rejected by the validator).
+    if (input.decision === 'approve_with_holds') {
+      const itemKeys = new Set(items.map((i) => heldKey({ section: i.section, localRef: i.localRef })));
+      for (const h of input.heldItems) {
+        if (!itemKeys.has(heldKey(h))) {
+          throw new Error(`held item "${h.section}/${h.localRef}" is not an item in package ${packageId}`);
+        }
+      }
     }
 
     // Record the immutable decision snapshot (unique constraint enforces one).
