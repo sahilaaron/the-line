@@ -61,6 +61,13 @@ export const entityKindEnum = pgEnum('entity_kind', [
   'civilisation',
   'concept',
   'period',
+  // Cycle 8B vocabulary v1 additions (forward-only; existing values kept).
+  'discovery',
+  'technology',
+  'movement',
+  'publication',
+  'product',
+  'law_policy',
 ]);
 
 export const relationshipTypeEnum = pgEnum('relationship_type', [

@@ -11,3 +11,4 @@ export * from './submit';
 export * from './qa';
 export * from './decision';
 export * from './promotion';
+export * from './vocabulary';
