@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { getDevDb } from '@/src/db/client/dev';
-import { entities, relationships, researchJobs, researchPackages, researchRuns } from '@/src/db/schema';
+import { entities, relationships, researchPackages, researchRuns } from '@/src/db/schema';
 import { desc, eq } from 'drizzle-orm';
 import { activeAgentCount } from '@/src/services/research/display-state';
 import { createRunAction, manualCaptureAction } from './actions';
