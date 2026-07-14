@@ -120,3 +120,29 @@ Prioritised. None of it should weaken the kernel.
 - `DiscoveryAdapter` injection point in `queue.claimNextJob`.
 - `assertion_class` on claims/relationships — inference/forecast can be stored
   now and surfaced later without ever becoming "fact".
+
+---
+
+## Cycle 8B addendum — Research Studio (does not weaken any 8A rule above)
+
+Cycle 8B turned `/crm` into the graph-native Research Studio. Every protected
+Cycle 8A rule above still holds. New protected rules for 8B:
+
+- The relationship-type REGISTRY is authoritative (not the legacy enum). Extend
+  the vocabulary via `src/db/seed/relationship-vocabulary.ts` + a forward-only
+  seed, never a destructive enum migration. Entity kinds are forward-only
+  additive only (never rename `organisation`).
+- Candidate editing is auditable and append-only (`research_package_item_
+  revisions`); the immutable submitted envelope is never mutated; editing never
+  writes canonical/`yol_*`.
+- A MATERIAL candidate edit after QA invalidates QA (→ `qa_pending`) and blocks
+  approval until QA is rerun (`qaIsStale` gate). Do not bypass it.
+- Candidate relationship edits must validate the type is ACTIVE and its endpoint
+  kinds accept the endpoints (`services/research/vocabulary.ts`).
+- The CoWork queue must stay HONEST: opening a batch never launches Claude; an
+  unclaimed queued job is exactly `Awaiting Agent(s)`; display states are derived
+  from the real state machine; no Anthropic API / paid-model execution.
+
+Remaining construction for the next cycle: automatic public entity pages / Topic
+World overlays; deep merge with reparenting; graph clustering/expand-collapse
+heuristics for very dense packages; QA provider handoff; freshness policy.
