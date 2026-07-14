@@ -74,17 +74,36 @@ export interface ClaimOptions {
 
 /** Recover any expired leases back to `queued` (outside a claim, e.g. a sweep). */
 export async function recoverExpiredLeases(db: Db, now: Date = new Date()): Promise<number> {
-  const rows = await db
-    .update(researchJobs)
-    .set({ status: 'queued', workerLock: null, leaseExpiresAt: null, updatedAt: new Date() })
-    .where(
-      and(
-        inArray(researchJobs.status, ['claimed', 'researching']),
-        lt(researchJobs.leaseExpiresAt, now),
-      ),
-    )
-    .returning({ id: researchJobs.id });
-  return rows.length;
+  // Recovering an abandoned lease FREES the batch slot it consumed (equivalent
+  // to a release), so the run can claim replacement work. Done per-job inside a
+  // transaction to keep the job status and the run counter consistent.
+  const expired = await db.query.researchJobs.findMany({
+    where: and(
+      inArray(researchJobs.status, ['claimed', 'researching']),
+      lt(researchJobs.leaseExpiresAt, now),
+    ),
+  });
+  let recovered = 0;
+  for (const job of expired) {
+    await db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(researchJobs)
+        .set({ status: 'queued', workerLock: null, claimedByWorker: null, claimedByRunId: null, leaseExpiresAt: null, updatedAt: new Date() })
+        .where(and(eq(researchJobs.id, job.id), inArray(researchJobs.status, ['claimed', 'researching'])))
+        .returning({ id: researchJobs.id });
+      if (!row) return; // someone else changed it — skip
+      if (job.claimedByRunId) {
+        const run = await tx.query.researchRuns.findFirst({ where: eq(researchRuns.id, job.claimedByRunId) });
+        if (run) {
+          await tx.update(researchRuns)
+            .set({ claimedCount: Math.max(0, run.claimedCount - 1), updatedAt: new Date() })
+            .where(eq(researchRuns.id, job.claimedByRunId));
+        }
+      }
+      recovered += 1;
+    });
+  }
+  return recovered;
 }
 
 /**
@@ -160,6 +179,7 @@ export async function claimNextJob(db: Db, runId: string, opts: ClaimOptions = {
         status: 'claimed',
         claimedByRunId: runId,
         workerLock: token,
+        claimedByWorker: opts.worker ?? 'worker',
         leaseExpiresAt: new Date(now.getTime() + config.leaseMs),
         attemptCount: chosen.attemptCount + 1,
         updatedAt: new Date(),

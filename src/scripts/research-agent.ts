@@ -117,12 +117,12 @@ async function main() {
       break;
     }
     case 'release': {
-      const j = await releaseJob(db, arg('--job')!);
+      const j = await releaseJob(db, arg('--job')!, arg('--worker') ?? 'cowork');
       console.log(JSON.stringify({ jobId: j.id, status: j.status }, null, 2));
       break;
     }
     case 'fail': {
-      const j = await failJob(db, arg('--job')!, arg('--reason') ?? 'unspecified');
+      const j = await failJob(db, arg('--job')!, arg('--reason') ?? 'unspecified', arg('--worker') ?? 'cowork');
       console.log(JSON.stringify({ jobId: j.id, status: j.status, lastError: j.lastError }, null, 2));
       break;
     }

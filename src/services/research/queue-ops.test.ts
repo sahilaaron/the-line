@@ -63,11 +63,11 @@ describe('queue admin', () => {
     const before = (await db.query.researchJobs.findFirst({ where: eq(researchJobs.id, jid) }))!.leaseExpiresAt!;
     const beat = await heartbeatJob(db, jid, 'agentA');
     expect(beat.leaseExpiresAt!.getTime()).toBeGreaterThanOrEqual(before.getTime());
-    const released = await releaseJob(db, jid);
+    const released = await releaseJob(db, jid, 'agentA');
     expect(released.status).toBe('queued');
     // re-claim + fail
     const c2 = await claimNextJob(db, run.id, { worker: 'agentB' });
-    const failed = await failJob(db, c2.job!.id, 'source unavailable');
+    const failed = await failJob(db, c2.job!.id, 'source unavailable', 'agentB');
     expect(failed.status).toBe('failed');
     expect(failed.lastError).toBe('source unavailable');
   });

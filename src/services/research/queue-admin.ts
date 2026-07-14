@@ -8,7 +8,15 @@ import { researchJobs, researchRuns, type ResearchJob, type ResearchRun } from '
 import type { Db } from '../../db/repositories/types';
 import { getJob, nextJobSequence } from '../../db/repositories/research';
 import { DEFAULT_QUEUE_CONFIG } from './config';
+import { settleRun } from './run';
 import { claimNextJob, type ClaimOptions, type ClaimResult } from './queue';
+
+/** Exact worker ownership (never prefix-matched): 'agent-1' must not operate a
+ * lease owned by 'agent-10'. */
+function assertOwner(job: ResearchJob, worker: string) {
+  const owner = job.claimedByWorker ?? job.workerLock?.split(':')[0] ?? null;
+  if (owner !== worker) throw new Error(`job ${job.id} lease is owned by "${owner ?? 'none'}", not "${worker}"`);
+}
 
 function assertQueued(job: ResearchJob) {
   if (job.status !== 'queued') throw new Error(`job ${job.id} is ${job.status}; only a queued (Awaiting Agent(s)) job can be edited/cancelled`);
@@ -58,7 +66,7 @@ export async function beginJob(db: Db, jobId: string, worker: string): Promise<R
   const job = await getJob(db, jobId);
   if (!job) throw new Error(`job ${jobId} not found`);
   if (job.status !== 'claimed') throw new Error(`job ${jobId} is ${job.status}; begin requires a claimed job`);
-  if (job.workerLock && !job.workerLock.startsWith(worker)) throw new Error(`job ${jobId} is locked by another worker`);
+  assertOwner(job, worker);
   const [row] = await db.update(researchJobs)
     .set({ status: 'researching', leaseExpiresAt: new Date(Date.now() + DEFAULT_QUEUE_CONFIG.leaseMs), updatedAt: new Date() })
     .where(eq(researchJobs.id, jobId)).returning();
@@ -69,31 +77,54 @@ export async function heartbeatJob(db: Db, jobId: string, worker: string): Promi
   const job = await getJob(db, jobId);
   if (!job) throw new Error(`job ${jobId} not found`);
   if (!['claimed', 'researching'].includes(job.status)) throw new Error(`job ${jobId} is ${job.status}; heartbeat requires a claimed/researching job`);
-  if (job.workerLock && !job.workerLock.startsWith(worker)) throw new Error(`job ${jobId} is locked by another worker`);
+  assertOwner(job, worker);
   const [row] = await db.update(researchJobs)
     .set({ leaseExpiresAt: new Date(Date.now() + DEFAULT_QUEUE_CONFIG.leaseMs), updatedAt: new Date() })
     .where(eq(researchJobs.id, jobId)).returning();
   return row;
 }
 
-export async function releaseJob(db: Db, jobId: string): Promise<ResearchJob> {
-  const job = await getJob(db, jobId);
-  if (!job) throw new Error(`job ${jobId} not found`);
-  if (!['claimed', 'researching'].includes(job.status)) throw new Error(`job ${jobId} is ${job.status}; release requires a claimed/researching job`);
-  const [row] = await db.update(researchJobs)
-    .set({ status: 'queued', workerLock: null, leaseExpiresAt: null, claimedByRunId: null, updatedAt: new Date() })
-    .where(eq(researchJobs.id, jobId)).returning();
-  return row;
+/** Release a claimed job back to the queue. Verifies worker ownership and
+ * FREES the batch slot it consumed (decrements claimedCount). Atomic. */
+export async function releaseJob(db: Db, jobId: string, worker: string): Promise<ResearchJob> {
+  return db.transaction(async (tx) => {
+    const job = await tx.query.researchJobs.findFirst({ where: eq(researchJobs.id, jobId) });
+    if (!job) throw new Error(`job ${jobId} not found`);
+    if (!['claimed', 'researching'].includes(job.status)) throw new Error(`job ${jobId} is ${job.status}; release requires a claimed/researching job`);
+    assertOwner(job, worker);
+    const [row] = await tx.update(researchJobs)
+      .set({ status: 'queued', workerLock: null, claimedByWorker: null, leaseExpiresAt: null, claimedByRunId: null, updatedAt: new Date() })
+      .where(eq(researchJobs.id, jobId)).returning();
+    if (job.claimedByRunId) {
+      const run = await tx.query.researchRuns.findFirst({ where: eq(researchRuns.id, job.claimedByRunId) });
+      if (run) await tx.update(researchRuns).set({ claimedCount: Math.max(0, run.claimedCount - 1), updatedAt: new Date() }).where(eq(researchRuns.id, job.claimedByRunId));
+    }
+    return row;
+  });
 }
 
-export async function failJob(db: Db, jobId: string, reason: string): Promise<ResearchJob> {
-  const job = await getJob(db, jobId);
-  if (!job) throw new Error(`job ${jobId} not found`);
-  if (!['claimed', 'researching'].includes(job.status)) throw new Error(`job ${jobId} is ${job.status}; fail requires a claimed/researching job`);
-  const [row] = await db.update(researchJobs)
-    .set({ status: 'failed', lastError: reason, workerLock: null, leaseExpiresAt: null, updatedAt: new Date() })
-    .where(eq(researchJobs.id, jobId)).returning();
-  return row;
+/** Fail a claimed job. Verifies ownership, records the outcome EXACTLY ONCE
+ * (idempotent — a repeat on an already-failed job is a no-op), and settles the
+ * run. A failed attempt CONSUMES its batch slot (claimedCount is not restored). */
+export async function failJob(db: Db, jobId: string, reason: string, worker: string): Promise<ResearchJob> {
+  const runId = await db.transaction(async (tx) => {
+    const job = await tx.query.researchJobs.findFirst({ where: eq(researchJobs.id, jobId) });
+    if (!job) throw new Error(`job ${jobId} not found`);
+    if (job.status === 'failed') return null; // idempotent no-op
+    if (!['claimed', 'researching'].includes(job.status)) throw new Error(`job ${jobId} is ${job.status}; fail requires a claimed/researching job`);
+    assertOwner(job, worker);
+    await tx.update(researchJobs)
+      .set({ status: 'failed', lastError: reason, workerLock: null, claimedByWorker: null, leaseExpiresAt: null, updatedAt: new Date() })
+      .where(eq(researchJobs.id, jobId));
+    if (job.claimedByRunId) {
+      const run = await tx.query.researchRuns.findFirst({ where: eq(researchRuns.id, job.claimedByRunId) });
+      if (run) await tx.update(researchRuns).set({ failedCount: run.failedCount + 1, updatedAt: new Date() }).where(eq(researchRuns.id, job.claimedByRunId));
+      return job.claimedByRunId;
+    }
+    return null;
+  });
+  if (runId) await settleRun(db, runId);
+  return (await getJob(db, jobId))!;
 }
 
 /* ---- active runs + safe claim-next ---- */

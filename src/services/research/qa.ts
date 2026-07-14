@@ -5,7 +5,7 @@
  * clean `pass` marks its targeted package item `held` so the reviewer sees it
  * excluded by default. The package advances to qa_complete.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import {
   qaFlags,
   qaResults,
@@ -58,6 +58,7 @@ export async function recordQa(db: Db, packageId: string, rawContract: unknown):
       .returning();
 
     const heldItems: { section: string; localRef: string }[] = [];
+    const flaggedKeys = new Set<string>();
     for (const flag of contract.flags) {
       await tx.insert(qaFlags).values({
         qaResultId: result.id,
@@ -70,11 +71,13 @@ export async function recordQa(db: Db, packageId: string, rawContract: unknown):
         correctiveSource: flag.correctiveSource,
         state: flag.state,
       });
-      // A non-pass flag on a specific item holds that item by default.
+      // A non-pass flag on a specific item holds that item by default, tagged
+      // as a QA-derived hold. A human hold is never downgraded to a QA hold.
       if (flag.state !== 'pass' && flag.targetSection && flag.targetRef) {
+        flaggedKeys.add(`${flag.targetSection} ${flag.targetRef}`);
         const [held] = await tx
           .update(researchPackageItems)
-          .set({ held: true })
+          .set({ held: true, holdSource: sql`case when ${researchPackageItems.holdSource} = 'human' then 'human' else 'qa' end` })
           .where(
             and(
               eq(researchPackageItems.packageId, packageId),
@@ -85,6 +88,15 @@ export async function recordQa(db: Db, packageId: string, rawContract: unknown):
           .returning({ section: researchPackageItems.section, ref: researchPackageItems.localRef });
         if (held) heldItems.push({ section: held.section, localRef: held.ref });
       }
+    }
+
+    // Clear OBSOLETE QA-derived holds: an item previously held BY QA that is not
+    // re-flagged in this (latest) QA result is released. Human holds are never
+    // touched by a QA rerun.
+    const priorQaHeld = (await tx.query.researchPackageItems.findMany({ where: eq(researchPackageItems.packageId, packageId) }))
+      .filter((i) => i.held && i.holdSource === 'qa' && !flaggedKeys.has(`${i.section} ${i.localRef}`));
+    for (const it of priorQaHeld) {
+      await tx.update(researchPackageItems).set({ held: false, holdSource: null }).where(eq(researchPackageItems.id, it.id));
     }
 
     if (pkg.status === 'submitted' || pkg.status === 'qa_pending') {

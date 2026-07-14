@@ -43,6 +43,13 @@
       "when": 1784064607852,
       "tag": "0005_cycle8b_package_revisions",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784068309709,
+      "tag": "0006_cycle8b_holds_worker_audit",
+      "breakpoints": true
     }
   ]
 }

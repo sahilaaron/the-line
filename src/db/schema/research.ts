@@ -85,6 +85,9 @@ export const researchJobs = pgTable(
       onDelete: 'set null',
     }),
     workerLock: text('worker_lock'),
+    /** Cycle 8B correction: exact worker identity of the current lease owner
+     * (never prefix-matched). Cleared on release/recovery/terminal. */
+    claimedByWorker: text('claimed_by_worker'),
     leaseExpiresAt: timestamp('lease_expires_at', { withTimezone: true }),
     attemptCount: integer('attempt_count').notNull().default(0),
     lastError: text('last_error'),
@@ -167,6 +170,9 @@ export const researchPackageItems = pgTable(
     /** Marked synthetic -> NEVER promotable into canonical rows. */
     isSynthetic: boolean('is_synthetic').notNull().default(false),
     held: boolean('held').notNull().default(false),
+    /** Cycle 8B correction: hold provenance so QA reruns clear only QA-derived
+     * holds and never a human hold. 'human' | 'qa' | null (not held). */
+    holdSource: text('hold_source'),
     decision: researchItemDecisionEnum('decision').notNull().default('pending'),
     decidedAt: timestamp('decided_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -278,6 +284,7 @@ export const researchPackageItemRevisions = pgTable(
   (t) => [
     index('research_package_item_revisions_item_idx').on(t.itemId),
     index('research_package_item_revisions_pkg_idx').on(t.packageId),
+    check('research_package_item_revisions_editor_not_empty', sql`length(${t.editor}) > 0`),
   ],
 );
 

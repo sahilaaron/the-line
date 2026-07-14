@@ -176,10 +176,13 @@ export async function decidePackage(
 
     let next: string = 'in_review';
     if (input.decision === 'approve') {
-      for (const it of items) await setItem(it.id, 'accepted');
+      // Package approval resolves PENDING candidates but must NEVER reverse an
+      // explicit item-level rejection.
+      for (const it of items) if (it.decision !== 'rejected') await setItem(it.id, 'accepted');
       next = 'approved';
     } else if (input.decision === 'approve_with_holds') {
       for (const it of items) {
+        if (it.decision === 'rejected') continue; // never un-reject an explicit rejection
         const excluded = heldSet.has(heldKey({ section: it.section, localRef: it.localRef })) || it.held;
         await setItem(it.id, excluded ? 'held' : 'accepted');
       }
