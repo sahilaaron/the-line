@@ -205,3 +205,72 @@ Intentionally deferred: deep canonical entity merge (mark_duplicate records a
 duplicate only); automatic public entity pages / Topic World overlays; graph
 auto-clustering for very dense packages; a real Wikipedia discovery adapter;
 production authentication.
+
+## Correction pass v3 (2026-07-15)
+
+Independently-reproduced defects fixed in this pass. Only behaviour that is
+implemented AND tested is described here.
+
+### Independent human vs QA holds
+A package item now carries two independent booleans, `human_held` and `qa_held`;
+the effective `held` column is maintained as their OR and a CHECK constraint
+(`research_package_items_held_consistent`) forbids any inconsistent state.
+Migration `0007` backfills existing rows from the old `hold_source` value
+(`human`/`qa`), defaults any other held row to a human hold, then drops
+`hold_source`. Consequences:
+
+- a human hold and a current QA hold can coexist;
+- removing a human hold (`setItemHold(..., false)`) never clears a current QA hold;
+- a passing QA rerun clears only `qa_held`; a human hold survives;
+- promotion / `approve_with_holds` read the effective `held`, so an item held by
+  either reason is excluded by default.
+
+### Current vs historical QA
+`projectPackageGraph` derives current QA flags from the LATEST `qa_result` only.
+Older results and their flags stay in the database for audit history but never
+mark a node/edge as currently flagged, so a passing rerun visibly clears the
+graph's `qa_flagged` state. Edge hold provenance (`humanHeld`/`qaHeld`) is now
+projected onto `GraphEdge` and rendered accurately, including simultaneous holds.
+
+### Expired-lease reclaim capacity
+`claimNextJob` can reclaim an expired `claimed`/`researching` job directly. A
+reclaim is not a new batch item: the prior run's slot is released exactly once
+and the new claim consumes one. Same-run reclaim nets zero; a different run
+reclaiming decrements the old run and increments the new one. `claimed_by_run_id`
+follows the reclaiming run.
+
+### Canonical-match editing
+`correctCanonicalMatch` enforces controlled statuses and status/id coherence: a
+status that asserts a canonical link (`canonical_complete`,
+`canonical_incomplete`, `confirmed_match`) requires a real, existing entity id; a
+no-entity status (`new_candidate`, `no_match`) is required to clear a match.
+Arbitrary free-text status and non-existent ids are rejected. The Studio node
+inspector provides a match editor (search + real-entity picker + controlled
+status select + explicit "clear match"); it can no longer silently clear a real
+match by submitting a status with no id.
+
+### Agent prompt worker identity
+The generated research-agent prompt tells the operator to choose ONE worker name
+and pass `--worker <your-name>` on every lease command (claim, claim-next-active,
+begin, heartbeat, release, fail). The lease is owned by that exact name; omitting
+`--worker` (which defaults to `cowork`) will not own the lease.
+
+### Developer-mode synthetic visibility
+Synthetic candidates are excluded from a normal package projection entirely
+(and edges to them are dropped). They are included only when the SERVER receives
+an explicit `?dev=1` developer-mode input; the client "show synthetic" checkbox
+appears only in that mode and merely toggles visibility of already-authorized
+data. Synthetic items remain unpromotable.
+
+### Queue UI
+Each job row shows its full id with a Copy control, the exact claimed worker
+(from `claimed_by_worker`), lease freshness/expiry, last-activity timestamp, and
+any failure/return reason; the focus note is editable while a job is queued.
+Priority ordering (priority desc, sequence asc) is preserved.
+
+### Inspector/editing completeness
+Node inspector: editable label, description and date (chronology start year);
+functional canonical-match editor; independent human-hold toggle. Edge inspector:
+sources/citations, dates, accurate human/QA hold provenance, type/endpoint edits.
+A neighbourhood focus control collapses the graph to a selected node and its
+direct neighbours. The accessible table rows select the node/edge they describe.
