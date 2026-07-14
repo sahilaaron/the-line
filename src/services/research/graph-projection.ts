@@ -23,6 +23,7 @@ export type EdgeState = 'held' | 'qa_flagged' | 'disputed' | 'provisional' | 'no
 
 export interface GraphNode {
   id: string;
+  itemId: string;
   localRef: string;
   label: string;
   kind: string;
@@ -43,6 +44,7 @@ export interface GraphNode {
 
 export interface GraphEdge {
   id: string;
+  itemId: string;
   localRef: string;
   source: string;
   target: string;
@@ -128,7 +130,7 @@ export async function projectPackageGraph(db: Db, packageId: string): Promise<Pa
     }
     void idx;
     return {
-      id: it.localRef, localRef: it.localRef, label: p.label ?? it.localRef, kind, role,
+      id: it.localRef, itemId: it.id, localRef: it.localRef, label: p.label ?? it.localRef, kind, role,
       states, primaryState, matchEntityId: it.matchEntityId, matchStatus: it.matchStatus,
       synthetic: it.isSynthetic, held: it.held, qaFlagged, decision: it.decision,
       year: yearByRef.get(it.localRef) ?? null, x, y, payload: it.payload,
@@ -152,7 +154,7 @@ export async function projectPackageGraph(db: Db, packageId: string): Promise<Pa
     if (states.length === 0) states.push('normal');
     const primaryState: EdgeState = it.held ? 'held' : qaFlagged ? 'qa_flagged' : disputed ? 'disputed' : isProvisional ? 'provisional' : 'normal';
     return {
-      id: it.localRef, localRef: it.localRef, source: p.sourceRef, target: p.targetRef,
+      id: it.localRef, itemId: it.id, localRef: it.localRef, source: p.sourceRef, target: p.targetRef,
       typeKey: p.typeKey, forwardLabel: reg?.label ?? p.typeKey, inverseLabel: reg?.inverseLabel ?? p.typeKey,
       directionality: (reg?.directionality ?? 'directed') as 'directed' | 'symmetric', category, isProvisional,
       states, primaryState, confidence: p.confidence ?? null, assertionClass: p.assertionClass ?? null,

@@ -67,3 +67,74 @@ export async function decisionAction(formData: FormData) {
   revalidatePath(`/crm/packages/${packageId}`);
   redirect(`/crm/packages/${packageId}`);
 }
+
+/* ---- Cycle 8B: Research Studio candidate-edit actions ---- */
+import {
+  editPackageItemFields,
+  changeRelationshipType,
+  changeRelationshipEndpoints,
+  setItemHold,
+  rejectPackageItem,
+  correctCanonicalMatch,
+} from '@/src/services/research/edit';
+
+const REVALIDATE = (pkgId: string) => {
+  revalidatePath(`/crm/packages/${pkgId}`);
+  revalidatePath('/crm');
+};
+
+export async function editItemFieldsAction(formData: FormData) {
+  const db = getDevDb();
+  const pkgId = String(formData.get('packageId') ?? '');
+  const itemId = String(formData.get('itemId') ?? '');
+  const field = String(formData.get('field') ?? '');
+  const value = String(formData.get('value') ?? '');
+  if (itemId && field) await editPackageItemFields(db, itemId, { [field]: value }, 'Sahil');
+  REVALIDATE(pkgId);
+}
+
+export async function changeRelTypeAction(formData: FormData) {
+  const db = getDevDb();
+  const pkgId = String(formData.get('packageId') ?? '');
+  const itemId = String(formData.get('itemId') ?? '');
+  const typeKey = String(formData.get('typeKey') ?? '');
+  if (itemId && typeKey) await changeRelationshipType(db, itemId, typeKey, 'Sahil');
+  REVALIDATE(pkgId);
+}
+
+export async function changeRelEndpointsAction(formData: FormData) {
+  const db = getDevDb();
+  const pkgId = String(formData.get('packageId') ?? '');
+  const itemId = String(formData.get('itemId') ?? '');
+  const sourceRef = String(formData.get('sourceRef') ?? '');
+  const targetRef = String(formData.get('targetRef') ?? '');
+  if (itemId && sourceRef && targetRef) await changeRelationshipEndpoints(db, itemId, sourceRef, targetRef, 'Sahil');
+  REVALIDATE(pkgId);
+}
+
+export async function holdItemAction(formData: FormData) {
+  const db = getDevDb();
+  const pkgId = String(formData.get('packageId') ?? '');
+  const itemId = String(formData.get('itemId') ?? '');
+  const held = String(formData.get('held') ?? 'true') === 'true';
+  if (itemId) await setItemHold(db, itemId, held, 'Sahil');
+  REVALIDATE(pkgId);
+}
+
+export async function rejectItemAction(formData: FormData) {
+  const db = getDevDb();
+  const pkgId = String(formData.get('packageId') ?? '');
+  const itemId = String(formData.get('itemId') ?? '');
+  if (itemId) await rejectPackageItem(db, itemId, 'Sahil');
+  REVALIDATE(pkgId);
+}
+
+export async function correctMatchAction(formData: FormData) {
+  const db = getDevDb();
+  const pkgId = String(formData.get('packageId') ?? '');
+  const itemId = String(formData.get('itemId') ?? '');
+  const matchEntityId = (formData.get('matchEntityId') as string) || null;
+  const matchStatus = (formData.get('matchStatus') as string) || null;
+  if (itemId) await correctCanonicalMatch(db, itemId, matchEntityId, matchStatus, 'Sahil');
+  REVALIDATE(pkgId);
+}
