@@ -4,7 +4,7 @@ import { researchJobs, researchRuns } from '@/src/db/schema';
 import { asc, desc, inArray } from 'drizzle-orm';
 import { jobDisplayState, activeAgentCount } from '@/src/services/research/display-state';
 import { researchAgentPrompt, qaAgentPrompt, claimCommand } from '@/src/services/research/prompts';
-import { stopRunAction, editPriorityAction, cancelJobAction, requeueJobAction } from '../actions';
+import { stopRunAction, editPriorityAction, editFocusNoteAction, cancelJobAction, requeueJobAction } from '../actions';
 import CopyButton from '../CopyButton';
 import AutoRefresh from '../AutoRefresh';
 import s from '../crm.module.css';
@@ -72,18 +72,39 @@ export default async function QueuePage() {
         {jobs.length === 0 && <div className={s.empty}>Queue is empty.</div>}
         {jobs.map((j) => {
           const display = jobDisplayState(j, pkgByJob.get(j.id), now);
+          // Exact claimed worker comes from claimedByWorker (never parsed from
+          // the internal workerLock token).
+          const worker = j.claimedByWorker ?? null;
+          const leaseMs = j.leaseExpiresAt ? j.leaseExpiresAt.getTime() - now.getTime() : null;
+          const leaseFresh = leaseMs != null && leaseMs > 0;
           return (
-            <div key={j.id} className={s.row} data-testid={`job-${j.id}`}>
-              <span style={{ flex: 1 }}>
+            <div key={j.id} className={s.row} data-testid={`job-${j.id}`} style={{ alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              <span style={{ flex: 1, minWidth: 0 }}>
                 <span className={`${s.pill} ${originPill[j.origin] ?? ''}`}>{j.origin}</span>{' '}
                 {j.centralTitle}
-                {j.focusNote && <span className={s.muted}> — {j.focusNote}</span>}
-                <span className={s.muted} style={{ fontSize: '0.7rem' }}>
-                  {' '}· pri {j.priority} · attempts {j.attemptCount}
-                  {j.workerLock ? ` · agent ${j.workerLock.split(':')[0]}` : ''}
-                  {j.leaseExpiresAt ? ` · lease ${j.leaseExpiresAt.toISOString().slice(11, 19)}` : ''}
-                  {j.lastError ? ` · error: ${j.lastError}` : ''}
+                <span style={{ display: 'block', marginTop: 2 }}>
+                  <code data-testid={`job-id-${j.id}`} style={{ fontSize: '0.68rem', color: '#8b93a3' }}>{j.id}</code>{' '}
+                  <CopyButton text={j.id} label="Copy Job ID" testid={`copy-job-${j.id}`} />
                 </span>
+                <span className={s.muted} style={{ fontSize: '0.7rem', display: 'block', marginTop: 2 }}>
+                  pri {j.priority} · attempts {j.attemptCount}
+                  {worker ? ` · worker ${worker}` : ' · worker —'}
+                  {j.leaseExpiresAt ? ` · lease ${leaseFresh ? 'fresh' : 'EXPIRED'} (exp ${j.leaseExpiresAt.toISOString().slice(11, 19)}Z)` : ' · no lease'}
+                  {` · last activity ${j.updatedAt.toISOString().slice(0, 19).replace('T', ' ')}Z`}
+                </span>
+                {(j.lastError || j.focusNote) && (
+                  <span className={s.muted} style={{ fontSize: '0.7rem', display: 'block', marginTop: 2 }}>
+                    {j.focusNote ? `focus: ${j.focusNote}` : ''}
+                    {j.lastError ? `${j.focusNote ? ' · ' : ''}reason: ${j.lastError}` : ''}
+                  </span>
+                )}
+                {j.status === 'queued' && (
+                  <form action={editFocusNoteAction} className={s.form} style={{ gap: '0.3rem', marginTop: 3 }}>
+                    <input type="hidden" name="jobId" value={j.id} />
+                    <input name="focusNote" defaultValue={j.focusNote ?? ''} placeholder="focus note (editable while queued)" data-testid={`focus-${j.id}`} style={{ fontSize: '0.7rem', width: '18rem' }} />
+                    <button className={`${s.btn} ${s.ghost}`} type="submit" style={{ fontSize: '0.68rem' }} data-testid={`save-focus-${j.id}`}>save note</button>
+                  </form>
+                )}
               </span>
               <span className={`${s.pill} ${display === 'Awaiting Agent(s)' ? s.hold : ''}`} data-testid={`job-state-${j.id}`}>{display}</span>
               {j.status === 'queued' && (

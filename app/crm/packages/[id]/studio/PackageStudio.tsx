@@ -4,6 +4,12 @@
  * 2D React Flow canvas + inspector + filters + accessible table fallback.
  * Node kind/state shown by glyph + text badges (never colour alone). Edits go
  * through validated, atomic server actions and may invalidate QA.
+ *
+ * v3 corrections: independent human/QA hold provenance on nodes AND edges; a
+ * functional canonical-match editor (search + real entity id + controlled
+ * status); editable dates and description; edge sources + dates; a neighbourhood
+ * focus (expand/collapse) control; synthetic candidates are only present when
+ * the SERVER authorized developer mode (?dev=1).
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
@@ -22,20 +28,25 @@ type GNode = {
   id: string; itemId: string; localRef: string; label: string; kind: string; role: string;
   primaryState: string; states: string[]; matchEntityId: string | null; matchStatus: string | null;
   matchSlug: string | null; matchLabel: string | null;
-  synthetic: boolean; held: boolean; holdSource: string | null; qaFlagged: boolean; decision: string; year: number | null;
+  synthetic: boolean; held: boolean; humanHeld: boolean; qaHeld: boolean; qaFlagged: boolean; decision: string; year: number | null;
   x: number; y: number; payload: Record<string, unknown>;
 };
 type GEdge = {
   id: string; itemId: string; localRef: string; source: string; target: string; typeKey: string;
   forwardLabel: string; inverseLabel: string; directionality: string; category: string;
   isProvisional: boolean; primaryState: string; states: string[]; confidence: number | null;
-  assertionClass: string | null; held: boolean; disputed: boolean; qaFlagged: boolean; decision: string; payload: Record<string, unknown>;
+  assertionClass: string | null; held: boolean; humanHeld: boolean; qaHeld: boolean; disputed: boolean; qaFlagged: boolean;
+  decision: string; sourceRefs: string[]; startYear: number | null; endYear: number | null; payload: Record<string, unknown>;
 };
 type Flag = { section: string | null; localRef: string | null; severity: string; category: string | null; explanation: string; state: string; correctiveSource: string | null };
 type Vocab = { key: string; label: string; inverseLabel: string; category: string; directionality: string; isActive: boolean; isProvisional: boolean; allowedSourceKinds: string[] | null; allowedTargetKinds: string[] | null };
 type PkgItem = { id: string; section: string; localRef: string; payload: Record<string, unknown> };
+type CanonEntity = { id: string; label: string; slug: string; kind: string };
 type StudioGraph = { nodes: GNode[]; edges: GEdge[]; flags: Flag[]; facets: { kinds: string[]; categories: string[] } };
-interface StudioProps { graph: StudioGraph; packageId: string; packageStatus: string; qaInvalidated: boolean; vocabulary: Vocab[]; items: PkgItem[]; }
+interface StudioProps {
+  graph: StudioGraph; packageId: string; packageStatus: string; qaInvalidated: boolean;
+  vocabulary: Vocab[]; items: PkgItem[]; canonicalEntities: CanonEntity[]; devMode: boolean;
+}
 
 const KIND_GLYPH: Record<string, string> = {
   person: '◗', organisation: '▣', place: '◆', event: '★', invention: '⬡', discovery: '✦',
@@ -47,6 +58,9 @@ const STATE_LABEL: Record<string, string> = {
   canonical_match: 'confirmed match', canonical_incomplete: 'canonical (incomplete)', new_candidate: 'candidate-only',
   disputed: 'disputed', provisional: 'provisional', normal: '',
 };
+// Controlled canonical-match statuses (mirror src/services/research/edit.ts).
+const STATUS_WITH_ENTITY = ['canonical_complete', 'canonical_incomplete', 'confirmed_match'];
+const STATUS_WITHOUT_ENTITY = ['new_candidate', 'no_match'];
 
 function kindAllowed(allowed: string[] | null, kind: string): boolean {
   return !allowed || allowed.length === 0 || allowed.includes(kind);
@@ -85,12 +99,13 @@ function chronologyPos(n: GNode): { x: number; y: number } {
 }
 
 function Canvas(props: StudioProps) {
-  const { graph, packageId, packageStatus, qaInvalidated, vocabulary, items } = props;
+  const { graph, packageId, packageStatus, qaInvalidated, vocabulary, items, canonicalEntities, devMode } = props;
   const [selNode, setSelNode] = useState<GNode | null>(null);
   const [selEdge, setSelEdge] = useState<GEdge | null>(null);
   const [chronology, setChronology] = useState(false);
   const [showTable, setShowTable] = useState(false);
   const [showSynthetic, setShowSynthetic] = useState(false);
+  const [neighbourhood, setNeighbourhood] = useState(false);
   const [kindFilter, setKindFilter] = useState<Set<string>>(new Set());
   const [catFilter, setCatFilter] = useState<Set<string>>(new Set());
   const [stateFilter, setStateFilter] = useState<'all' | 'candidate' | 'canonical'>('all');
@@ -98,14 +113,28 @@ function Canvas(props: StudioProps) {
 
   const kindByRef = useMemo(() => new Map(graph.nodes.map((n) => [n.localRef, n.kind])), [graph.nodes]);
 
+  // Direct-neighbour set of the selected node (for the expand/collapse focus).
+  const neighbourRefs = useMemo(() => {
+    if (!selNode) return null;
+    const set = new Set<string>([selNode.localRef]);
+    for (const e of graph.edges) {
+      if (e.source === selNode.localRef) set.add(e.target);
+      if (e.target === selNode.localRef) set.add(e.source);
+    }
+    return set;
+  }, [selNode, graph.edges]);
+
   const visibleNodes = useMemo(() => graph.nodes.filter((n) => {
-    if (!showSynthetic && n.synthetic) return false;
+    // Synthetic nodes only exist here in dev mode; the checkbox toggles their
+    // visibility but can never introduce data the server did not authorize.
+    if (n.synthetic && !showSynthetic) return false;
     if (kindFilter.size && !kindFilter.has(n.kind)) return false;
     if (qaOnly && !n.qaFlagged && !n.held) return false;
     if (stateFilter === 'candidate' && n.matchEntityId) return false;
     if (stateFilter === 'canonical' && !n.matchEntityId) return false;
+    if (neighbourhood && neighbourRefs && !neighbourRefs.has(n.localRef)) return false;
     return true;
-  }), [graph.nodes, showSynthetic, kindFilter, qaOnly, stateFilter]);
+  }), [graph.nodes, showSynthetic, kindFilter, qaOnly, stateFilter, neighbourhood, neighbourRefs]);
   const visibleIds = useMemo(() => new Set(visibleNodes.map((n) => n.localRef)), [visibleNodes]);
 
   const rfNodes: Node[] = useMemo(() => visibleNodes.map((n) => ({
@@ -149,15 +178,20 @@ function Canvas(props: StudioProps) {
       <div className={s.form} style={{ marginBottom: '0.6rem', flexWrap: 'wrap', gap: '0.7rem' }}>
         <button className={`${s.btn} ${s.ghost}`} onClick={() => setChronology((v) => !v)} data-testid="toggle-chronology">{chronology ? 'Radial layout' : 'Chronology layout'}</button>
         <button className={`${s.btn} ${s.ghost}`} onClick={() => setShowTable((v) => !v)} data-testid="toggle-table">{showTable ? 'Hide table' : 'Table view'}</button>
+        <label className={s.muted} style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: '0.72rem' }}>
+          <input type="checkbox" checked={neighbourhood} onChange={(e) => setNeighbourhood(e.target.checked)} data-testid="filter-neighbourhood" /> focus neighbourhood of selection
+        </label>
         <select value={stateFilter} onChange={(e) => setStateFilter(e.target.value as 'all' | 'candidate' | 'canonical')} data-testid="filter-state" style={{ fontSize: '0.75rem' }}>
           <option value="all">all nodes</option><option value="candidate">candidate-only</option><option value="canonical">canonical/matched</option>
         </select>
         <label className={s.muted} style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: '0.72rem' }}>
           <input type="checkbox" checked={qaOnly} onChange={(e) => setQaOnly(e.target.checked)} data-testid="filter-qa" /> QA-flagged/held only
         </label>
-        <label className={s.muted} style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: '0.72rem' }}>
-          <input type="checkbox" checked={showSynthetic} onChange={(e) => setShowSynthetic(e.target.checked)} data-testid="filter-synthetic" /> show synthetic (dev)
-        </label>
+        {devMode && (
+          <label className={s.muted} style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: '0.72rem' }} data-testid="dev-badge">
+            <input type="checkbox" checked={showSynthetic} onChange={(e) => setShowSynthetic(e.target.checked)} data-testid="filter-synthetic" /> show synthetic (dev mode)
+          </label>
+        )}
         <span className={s.muted} style={{ fontSize: '0.7rem' }}>kinds:</span>
         {allKinds.map((k) => (
           <label key={k} className={s.muted} style={{ display: 'flex', gap: 3, alignItems: 'center', fontSize: '0.7rem' }}>
@@ -172,7 +206,7 @@ function Canvas(props: StudioProps) {
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 360px', gap: '0.9rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 380px', gap: '0.9rem' }}>
         <div data-testid="graph-canvas" style={{ height: 580, border: '1px solid #1b1f2a', borderRadius: 10, background: '#0b0d12' }}>
           <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
             onNodeClick={onNodeClick} onEdgeClick={onEdgeClick} fitView minZoom={0.2} maxZoom={2}>
@@ -181,11 +215,11 @@ function Canvas(props: StudioProps) {
         </div>
         <aside data-testid="inspector" className={s.card} style={{ maxHeight: 580, overflow: 'auto' }}>
           {!selNode && !selEdge && <p className={s.muted}>Select a node or edge to inspect and edit it.</p>}
-          {selNode && <NodeInspector node={selNode} packageId={packageId} editable={editable} items={items} flags={graph.flags} />}
+          {selNode && <NodeInspector node={selNode} packageId={packageId} editable={editable} items={items} flags={graph.flags} canonicalEntities={canonicalEntities} />}
           {selEdge && <EdgeInspector edge={selEdge} packageId={packageId} editable={editable} vocabulary={vocabulary} items={items} flags={graph.flags} sourceKind={kindByRef.get(selEdge.source) ?? 'concept'} targetKind={kindByRef.get(selEdge.target) ?? 'concept'} entityRefs={entityRefs} />}
         </aside>
       </div>
-      {showTable && <GraphTable graph={graph} />}
+      {showTable && <GraphTable graph={graph} onSelectNode={(n) => { setSelEdge(null); setSelNode(n); }} onSelectEdge={(e) => { setSelNode(null); setSelEdge(e); }} />}
     </div>
   );
 }
@@ -194,12 +228,55 @@ function Row({ k, v }: { k: string; v: React.ReactNode }) {
   return (<div style={{ display: 'grid', gridTemplateColumns: '7.5rem 1fr', gap: '0.3rem 0.6rem', fontSize: '0.82rem', padding: '0.15rem 0' }}>
     <span className={s.muted}>{k}</span><span>{v}</span></div>);
 }
-function HoldRow({ held, source }: { held: boolean; source: string | null }) {
-  if (!held) return <Row k="hold" v="no" />;
-  return <Row k="hold" v={<span className={`${s.pill} ${s.hold}`}>{source === 'human' ? 'HUMAN hold' : 'QA hold'}</span>} />;
+/** Human and QA holds are INDEPENDENT and may both be present. */
+function HoldRow({ humanHeld, qaHeld }: { humanHeld: boolean; qaHeld: boolean }) {
+  if (!humanHeld && !qaHeld) return <Row k="hold" v="no" />;
+  return <Row k="hold" v={<span style={{ display: 'inline-flex', gap: 4 }}>
+    {humanHeld && <span data-testid="hold-human" className={`${s.pill} ${s.hold}`}>HUMAN hold</span>}
+    {qaHeld && <span data-testid="hold-qa" className={`${s.pill} ${s.hold}`}>QA hold</span>}
+  </span>} />;
 }
 
-function NodeInspector({ node, packageId, editable, items, flags }: { node: GNode; packageId: string; editable: boolean; items: PkgItem[]; flags: Flag[] }) {
+/** Functional canonical-match editor: filter + real entity id + controlled
+ * status + explicit clear. Never submits a status without the id it asserts. */
+function MatchEditor({ node, packageId, canonicalEntities }: { node: GNode; packageId: string; canonicalEntities: CanonEntity[] }) {
+  const [q, setQ] = useState('');
+  const [entityId, setEntityId] = useState(node.matchEntityId ?? '');
+  const [status, setStatus] = useState(node.matchStatus ?? (node.matchEntityId ? 'canonical_incomplete' : 'new_candidate'));
+  const filtered = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    const list = t ? canonicalEntities.filter((e) => e.label.toLowerCase().includes(t) || e.slug.toLowerCase().includes(t)) : canonicalEntities;
+    return list.slice(0, 50);
+  }, [q, canonicalEntities]);
+  const statusOptions = entityId ? STATUS_WITH_ENTITY : STATUS_WITHOUT_ENTITY;
+  return (
+    <div data-testid="match-editor" className={s.card} style={{ marginTop: '0.4rem', background: '#0b0e14' }}>
+      <div className={s.muted} style={{ fontSize: '0.72rem', marginBottom: 3 }} data-testid="match-current">
+        current: {node.matchEntityId ? <>matched <b>{node.matchLabel ?? node.matchSlug ?? node.matchEntityId}</b> ({node.matchStatus ?? 'matched'})</> : 'no canonical match'}
+      </div>
+      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="search canonical entities…" data-testid="match-search" style={{ fontSize: '0.74rem', width: '100%' }} />
+      <form action={correctMatchAction} className={s.form} style={{ gap: '0.3rem', marginTop: '0.3rem', flexWrap: 'wrap' }}>
+        <input type="hidden" name="packageId" value={packageId} /><input type="hidden" name="itemId" value={node.itemId} />
+        <select name="matchEntityId" value={entityId} onChange={(e) => { setEntityId(e.target.value); if (e.target.value && !STATUS_WITH_ENTITY.includes(status)) setStatus('canonical_incomplete'); if (!e.target.value && !STATUS_WITHOUT_ENTITY.includes(status)) setStatus('new_candidate'); }} data-testid="match-entity-select" style={{ fontSize: '0.74rem', maxWidth: 220 }}>
+          <option value="">— no canonical entity —</option>
+          {filtered.map((e) => <option key={e.id} value={e.id}>{e.label} · {e.slug} ({e.kind})</option>)}
+        </select>
+        <select name="matchStatus" value={status} onChange={(e) => setStatus(e.target.value)} data-testid="match-status-select" style={{ fontSize: '0.74rem' }}>
+          {statusOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+        <button className={s.btn} type="submit" data-testid="save-match">Save match</button>
+      </form>
+      <form action={correctMatchAction} style={{ marginTop: '0.3rem' }}>
+        <input type="hidden" name="packageId" value={packageId} /><input type="hidden" name="itemId" value={node.itemId} />
+        <input type="hidden" name="matchEntityId" value="" /><input type="hidden" name="matchStatus" value="no_match" />
+        <button className={`${s.btn} ${s.ghost}`} type="submit" data-testid="clear-match">Clear match</button>
+      </form>
+      <p className={s.muted} style={{ fontSize: '0.66rem', marginTop: '0.3rem' }}>A canonical match requires selecting a real entity; the server validates status/id coherence and rejects a status that asserts a link with no entity.</p>
+    </div>
+  );
+}
+
+function NodeInspector({ node, packageId, editable, items, flags, canonicalEntities }: { node: GNode; packageId: string; editable: boolean; items: PkgItem[]; flags: Flag[]; canonicalEntities: CanonEntity[] }) {
   const p = node.payload as { slug?: string; aliases?: { alias: string }[]; shortDescription?: string; externalIds?: { scheme: string; value: string }[] };
   const claims = items.filter((i) => i.section === 'claim' && (i.payload as { subjectRef?: string }).subjectRef === node.localRef);
   const srcRefs = new Set(claims.flatMap((c) => ((c.payload as { sourceLinks?: { sourceRef: string }[] }).sourceLinks ?? []).map((l) => l.sourceRef)));
@@ -219,7 +296,7 @@ function NodeInspector({ node, packageId, editable, items, flags }: { node: GNod
         ? <span>{node.matchStatus ?? 'matched'} · {node.matchSlug ? <Link href={`/crm/entities/${node.matchSlug}`} data-testid="match-link">{node.matchLabel ?? node.matchSlug} →</Link> : node.matchLabel ?? node.matchEntityId}</span>
         : 'none (new candidate)'} />
       <Row k="dates" v={times.length ? times.map((t) => `${(t.payload as { role?: string }).role} ${(t.payload as { startYear?: number }).startYear}`).join(', ') : <span className={s.muted}>— (none)</span>} />
-      <Row k="decision" v={node.decision} /><HoldRow held={node.held} source={node.holdSource} />
+      <Row k="decision" v={node.decision} /><HoldRow humanHeld={node.humanHeld} qaHeld={node.qaHeld} />
       <Row k="provenance" v={`package item · ${node.localRef}`} />
       <div style={{ marginTop: '0.4rem' }}>
         <b className={s.muted} style={{ fontSize: '0.72rem' }}>claims ({claims.length})</b>
@@ -239,16 +316,25 @@ function NodeInspector({ node, packageId, editable, items, flags }: { node: GNod
             <input name="value" defaultValue={node.label} data-testid="edit-node-label" style={{ fontSize: '0.78rem' }} />
             <button className={s.btn} type="submit" data-testid="save-node">Save label</button>
           </form>
-          <form action={correctMatchAction} className={s.form} style={{ gap: '0.35rem', marginTop: '0.35rem' }}>
-            <input type="hidden" name="packageId" value={packageId} /><input type="hidden" name="itemId" value={node.itemId} />
-            <input name="matchStatus" placeholder="match status (e.g. canonical_complete)" defaultValue={node.matchStatus ?? ''} style={{ fontSize: '0.74rem' }} />
-            <button className={`${s.btn} ${s.ghost}`} type="submit" data-testid="save-match">Set match status</button>
+          <form action={editItemFieldsAction} className={s.form} style={{ gap: '0.35rem', marginTop: '0.35rem' }}>
+            <input type="hidden" name="packageId" value={packageId} /><input type="hidden" name="itemId" value={node.itemId} /><input type="hidden" name="field" value="shortDescription" />
+            <input name="value" defaultValue={p.shortDescription ?? ''} placeholder="short description" data-testid="edit-node-description" style={{ fontSize: '0.76rem' }} />
+            <button className={`${s.btn} ${s.ghost}`} type="submit" data-testid="save-node-description">Save description</button>
           </form>
+          {times.map((t) => (
+            <form key={t.id} action={editItemFieldsAction} className={s.form} style={{ gap: '0.3rem', marginTop: '0.35rem', alignItems: 'center' }}>
+              <input type="hidden" name="packageId" value={packageId} /><input type="hidden" name="itemId" value={t.id} /><input type="hidden" name="field" value="startYear" />
+              <span className={s.muted} style={{ fontSize: '0.7rem' }}>{(t.payload as { role?: string }).role} year</span>
+              <input name="value" type="number" defaultValue={String((t.payload as { startYear?: number }).startYear ?? '')} data-testid="edit-node-date" style={{ fontSize: '0.74rem', width: '5rem' }} />
+              <button className={`${s.btn} ${s.ghost}`} type="submit" data-testid="save-node-date">Save year</button>
+            </form>
+          ))}
+          <MatchEditor node={node} packageId={packageId} canonicalEntities={canonicalEntities} />
           <form action={holdItemAction} style={{ marginTop: '0.35rem' }}>
-            <input type="hidden" name="packageId" value={packageId} /><input type="hidden" name="itemId" value={node.itemId} /><input type="hidden" name="held" value={(!node.held).toString()} />
-            <button className={`${s.btn} ${s.ghost}`} type="submit" data-testid="hold-node">{node.held ? 'Unhold' : 'Hold'} node</button>
+            <input type="hidden" name="packageId" value={packageId} /><input type="hidden" name="itemId" value={node.itemId} /><input type="hidden" name="held" value={(!node.humanHeld).toString()} />
+            <button className={`${s.btn} ${s.ghost}`} type="submit" data-testid="hold-node">{node.humanHeld ? 'Remove human hold' : 'Human hold'} node</button>
           </form>
-          <p className={s.muted} style={{ fontSize: '0.68rem', marginTop: '0.3rem' }}>Field/match edits are validated, atomic, audited, and invalidate QA.</p>
+          <p className={s.muted} style={{ fontSize: '0.68rem', marginTop: '0.3rem' }}>Field/date/match edits are validated, atomic, audited, and invalidate QA. A human hold is independent of any QA hold.</p>
         </div>
       )}
     </div>
@@ -258,6 +344,7 @@ function NodeInspector({ node, packageId, editable, items, flags }: { node: GNod
 function EdgeInspector({ edge, packageId, editable, vocabulary, items, flags, sourceKind, targetKind, entityRefs }: { edge: GEdge; packageId: string; editable: boolean; vocabulary: Vocab[]; items: PkgItem[]; flags: Flag[]; sourceKind: string; targetKind: string; entityRefs: string[] }) {
   const claims = items.filter((i) => i.section === 'claim' && (i.payload as { subjectSection?: string; subjectRef?: string }).subjectSection === 'relationship' && (i.payload as { subjectRef?: string }).subjectRef === edge.localRef);
   const edgeFlags = flags.filter((f) => f.section === 'relationship' && f.localRef === edge.localRef);
+  const sources = items.filter((i) => i.section === 'source' && edge.sourceRefs.includes(i.localRef));
   const compatible = vocabulary.filter((v) => edgeCompatible(v, sourceKind, targetKind));
   return (
     <div>
@@ -267,8 +354,10 @@ function EdgeInspector({ edge, packageId, editable, vocabulary, items, flags, so
       <Row k="type" v={edge.typeKey} /><Row k="forward" v={edge.forwardLabel} /><Row k="inverse" v={edge.inverseLabel} />
       <Row k="direction" v={edge.directionality} /><Row k="source → target" v={`${edge.source} (${sourceKind}) → ${edge.target} (${targetKind})`} />
       <Row k="category" v={edge.category} /><Row k="confidence" v={edge.confidence ?? '—'} /><Row k="assertion" v={edge.assertionClass ?? '—'} />
-      <Row k="disputed" v={edge.disputed ? 'yes' : 'no'} /><HoldRow held={edge.held} source={edge.qaFlagged && !edge.held ? null : (edge.payload as { holdSource?: string }).holdSource ?? (edge.held ? 'qa' : null)} />
+      <Row k="dates" v={<span data-testid="edge-dates">{edge.startYear != null ? `${edge.startYear}${edge.endYear != null ? `–${edge.endYear}` : ''}` : <span className={s.muted}>— (none)</span>}</span>} />
+      <Row k="disputed" v={edge.disputed ? 'yes' : 'no'} /><HoldRow humanHeld={edge.humanHeld} qaHeld={edge.qaHeld} />
       <Row k="endpoint valid" v={compatible.some((v) => v.key === edge.typeKey) ? <span className={`${s.pill} ${s.ok}`}>ok</span> : <span className={`${s.pill} ${s.warn}`} data-testid="endpoint-invalid">incompatible endpoints</span>} />
+      <Row k="sources" v={<span data-testid="edge-sources">{sources.length ? sources.map((c) => (c.payload as { title?: string }).title).join('; ') : <span className={s.muted}>— (no citations)</span>}</span>} />
       <Row k="provenance" v={`package item · ${edge.localRef}`} />
       {claims.length > 0 && <div style={{ marginTop: '0.3rem' }}><b className={s.muted} style={{ fontSize: '0.72rem' }}>claims</b>{claims.map((c) => <div key={c.id} className={s.muted} style={{ fontSize: '0.76rem' }}>• {(c.payload as { text?: string }).text}</div>)}</div>}
       {edgeFlags.length > 0 && <div>{edgeFlags.map((f, i) => <div key={i} className={`${s.pill} ${s.hold}`} style={{ display: 'block', margin: '2px 0' }}>QA: {f.explanation}</div>)}</div>}
@@ -288,8 +377,8 @@ function EdgeInspector({ edge, packageId, editable, vocabulary, items, flags, so
             <button className={`${s.btn} ${s.ghost}`} type="submit" data-testid="save-endpoints">Change endpoints</button>
           </form>
           <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.35rem' }}>
-            <form action={holdItemAction}><input type="hidden" name="packageId" value={packageId} /><input type="hidden" name="itemId" value={edge.itemId} /><input type="hidden" name="held" value={(!edge.held).toString()} />
-              <button className={`${s.btn} ${s.ghost}`} type="submit" data-testid="hold-edge">{edge.held ? 'Unhold' : 'Hold'} edge</button></form>
+            <form action={holdItemAction}><input type="hidden" name="packageId" value={packageId} /><input type="hidden" name="itemId" value={edge.itemId} /><input type="hidden" name="held" value={(!edge.humanHeld).toString()} />
+              <button className={`${s.btn} ${s.ghost}`} type="submit" data-testid="hold-edge">{edge.humanHeld ? 'Remove human hold' : 'Human hold'} edge</button></form>
             <form action={rejectItemAction}><input type="hidden" name="packageId" value={packageId} /><input type="hidden" name="itemId" value={edge.itemId} />
               <button className={`${s.btn} ${s.danger}`} type="submit" data-testid="reject-edge">Reject edge</button></form>
           </div>
@@ -300,19 +389,19 @@ function EdgeInspector({ edge, packageId, editable, vocabulary, items, flags, so
   );
 }
 
-function GraphTable({ graph }: { graph: StudioGraph }) {
+function GraphTable({ graph, onSelectNode, onSelectEdge }: { graph: StudioGraph; onSelectNode: (n: GNode) => void; onSelectEdge: (e: GEdge) => void }) {
   return (
     <div data-testid="graph-table" className={s.card} style={{ marginTop: '0.8rem' }}>
-      <h3 className={s.h} style={{ marginTop: 0 }}>Accessible table (same graph)</h3>
+      <h3 className={s.h} style={{ marginTop: 0 }}>Accessible table (same graph — rows select the node/edge)</h3>
       <b className={s.muted}>Nodes</b>
       <table style={{ width: '100%', fontSize: '0.8rem', borderCollapse: 'collapse' }}>
         <thead><tr style={{ textAlign: 'left', color: '#7f8798' }}><th>ref</th><th>label</th><th>kind</th><th>state</th><th>match</th></tr></thead>
-        <tbody>{graph.nodes.map((n) => <tr key={n.id}><td>{n.localRef}</td><td>{n.label}</td><td>{n.kind}</td><td>{n.primaryState}</td><td>{n.matchSlug ?? (n.matchEntityId ? (n.matchStatus ?? 'matched') : '—')}</td></tr>)}</tbody>
+        <tbody>{graph.nodes.map((n) => <tr key={n.id} data-testid={`table-node-${n.localRef}`} onClick={() => onSelectNode(n)} style={{ cursor: 'pointer' }}><td>{n.localRef}</td><td>{n.label}</td><td>{n.kind}</td><td>{n.primaryState}</td><td>{n.matchSlug ?? (n.matchEntityId ? (n.matchStatus ?? 'matched') : '—')}</td></tr>)}</tbody>
       </table>
       <b className={s.muted}>Edges</b>
       <table style={{ width: '100%', fontSize: '0.8rem', borderCollapse: 'collapse' }}>
         <thead><tr style={{ textAlign: 'left', color: '#7f8798' }}><th>source</th><th>label</th><th>target</th><th>direction</th><th>state</th></tr></thead>
-        <tbody>{graph.edges.map((e) => <tr key={e.id}><td>{e.source}</td><td>{e.forwardLabel}</td><td>{e.target}</td><td>{e.directionality}</td><td>{e.primaryState}</td></tr>)}</tbody>
+        <tbody>{graph.edges.map((e) => <tr key={e.id} data-testid={`table-edge-${e.localRef}`} onClick={() => onSelectEdge(e)} style={{ cursor: 'pointer' }}><td>{e.source}</td><td>{e.forwardLabel}</td><td>{e.target}</td><td>{e.directionality}</td><td>{e.primaryState}</td></tr>)}</tbody>
       </table>
     </div>
   );

@@ -83,13 +83,20 @@ const REVALIDATE = (pkgId: string) => {
   revalidatePath('/crm');
 };
 
+// Fields whose value is numeric in the package contract (dates, weights) — the
+// form submits strings, so coerce before validation.
+const NUMERIC_FIELDS = new Set(['startYear', 'endYear', 'confidence', 'strength']);
+
 export async function editItemFieldsAction(formData: FormData) {
   const db = getDevDb();
   const pkgId = String(formData.get('packageId') ?? '');
   const itemId = String(formData.get('itemId') ?? '');
   const field = String(formData.get('field') ?? '');
-  const value = String(formData.get('value') ?? '');
-  if (itemId && field) await editPackageItemFields(db, itemId, { [field]: value }, 'Sahil');
+  const raw = String(formData.get('value') ?? '');
+  if (itemId && field) {
+    const value: unknown = NUMERIC_FIELDS.has(field) ? Number(raw) : raw;
+    await editPackageItemFields(db, itemId, { [field]: value }, 'Sahil');
+  }
   REVALIDATE(pkgId);
 }
 
@@ -133,6 +140,9 @@ export async function correctMatchAction(formData: FormData) {
   const db = getDevDb();
   const pkgId = String(formData.get('packageId') ?? '');
   const itemId = String(formData.get('itemId') ?? '');
+  // A real canonical entity id (from the picker) or empty to clear. The service
+  // validates status/id coherence and entity existence and throws on mismatch,
+  // so a status that asserts a link can never silently clear a real match.
   const matchEntityId = (formData.get('matchEntityId') as string) || null;
   const matchStatus = (formData.get('matchStatus') as string) || null;
   if (itemId) await correctCanonicalMatch(db, itemId, matchEntityId, matchStatus, 'Sahil');
@@ -140,13 +150,21 @@ export async function correctMatchAction(formData: FormData) {
 }
 
 /* ---- Cycle 8B: honest queue management actions ---- */
-import { editJobPriority, cancelJob, requeueJob } from '@/src/services/research/queue-admin';
+import { editJobPriority, editJobFocusNote, cancelJob, requeueJob } from '@/src/services/research/queue-admin';
 
 export async function editPriorityAction(formData: FormData) {
   const db = getDevDb();
   const jobId = String(formData.get('jobId') ?? '');
   const priority = Number(formData.get('priority') ?? 0);
   if (jobId) await editJobPriority(db, jobId, priority);
+  revalidatePath('/crm/queue');
+  revalidatePath('/crm');
+}
+export async function editFocusNoteAction(formData: FormData) {
+  const db = getDevDb();
+  const jobId = String(formData.get('jobId') ?? '');
+  const focusNote = (formData.get('focusNote') as string) || null;
+  if (jobId) await editJobFocusNote(db, jobId, focusNote);
   revalidatePath('/crm/queue');
   revalidatePath('/crm');
 }
