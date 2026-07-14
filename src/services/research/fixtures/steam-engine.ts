@@ -16,7 +16,7 @@
  * one synthetic item that must be excluded from promotion.
  */
 import type { Db } from '../../../db/repositories/types';
-import { createEntity } from '../../../db/repositories/entities';
+import { createEntity, findEntityBySlug } from '../../../db/repositories/entities';
 import { addAlias, addExternalId } from '../../../db/repositories/graph-ext';
 
 export const STEAM_ENGINE_ENVELOPE = {
@@ -112,8 +112,17 @@ export const STEAM_ENGINE_DECISION = {
 };
 
 /** Seed the two existing canonical entities the fixture matches against. */
+/** Find-or-create an entity by slug (idempotent seed helper). */
+async function ensureEntity(db: Db, input: Parameters<typeof createEntity>[1]): Promise<{ id: string }> {
+  const existing = await findEntityBySlug(db, input.slug!);
+  if (existing) return existing;
+  return createEntity(db, input);
+}
+
+/** Idempotent: reuses james-watt / thomas-newcomen when already present.
+ * addAlias/addExternalId are themselves idempotent (onConflictDoNothing). */
 export async function seedSteamEngineExistingCanon(db: Db): Promise<{ wattId: string; newcomenId: string }> {
-  const watt = await createEntity(db, {
+  const watt = await ensureEntity(db, {
     slug: 'james-watt',
     kind: 'person',
     label: 'James Watt',
@@ -124,7 +133,7 @@ export async function seedSteamEngineExistingCanon(db: Db): Promise<{ wattId: st
   });
   await addAlias(db, { entityId: watt.id, alias: 'James Watt', aliasType: 'alias' });
   await addExternalId(db, { entityId: watt.id, scheme: 'wikidata', value: 'Q8447' });
-  const newcomen = await createEntity(db, {
+  const newcomen = await ensureEntity(db, {
     slug: 'thomas-newcomen',
     kind: 'person',
     label: 'Thomas Newcomen',
