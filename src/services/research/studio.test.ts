@@ -32,8 +32,11 @@ describe('graph projection', () => {
     const pkg = await stageSteamEngine(db, false);
     const g = (await projectPackageGraph(db, pkg.id))!;
     expect(g.nodes.find((n) => n.role === 'central')!.localRef).toBe('central');
-    // synthetic node distinguished
-    expect(g.nodes.find((n) => n.localRef === 'synthnode')!.primaryState).toBe('synthetic_excluded');
+    // v3: synthetic candidates are EXCLUDED from a normal projection entirely.
+    expect(g.nodes.find((n) => n.localRef === 'synthnode')).toBeUndefined();
+    // ...but present + marked in explicit developer mode.
+    const gDev = (await projectPackageGraph(db, pkg.id, { includeSynthetic: true }))!;
+    expect(gDev.nodes.find((n) => n.localRef === 'synthnode')!.primaryState).toBe('synthetic_excluded');
     // canonical match vs new candidate distinction (watt matches seeded canon)
     const watt = g.nodes.find((n) => n.localRef === 'watt')!;
     expect(watt.matchEntityId).toBeTruthy();

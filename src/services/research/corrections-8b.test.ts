@@ -113,16 +113,18 @@ describe('5. obsolete QA holds cleared; human holds preserved', () => {
     const pkg = await stageSteam(db, true); // QA flags rel-newcomen -> QA hold
     const relNewcomen = await item(db, pkg.id, 'relationship', 'rel-newcomen');
     expect(relNewcomen.held).toBe(true);
-    expect(relNewcomen.holdSource).toBe('qa');
+    expect(relNewcomen.qaHeld).toBe(true);
+    expect(relNewcomen.humanHeld).toBe(false);
     // human holds a different edge
     const relGlasgow = await item(db, pkg.id, 'relationship', 'rel-glasgow');
     await setItemHold(db, relGlasgow.id, true, 'Sahil');
-    expect((await item(db, pkg.id, 'relationship', 'rel-glasgow')).holdSource).toBe('human');
+    expect((await item(db, pkg.id, 'relationship', 'rel-glasgow')).humanHeld).toBe(true);
     // rerun QA WITHOUT the rel-newcomen flag (a clean pass)
     await recordQa(db, pkg.id, { recommendation: 'pass', flags: [] });
     expect((await item(db, pkg.id, 'relationship', 'rel-newcomen')).held).toBe(false); // QA hold cleared
     expect((await item(db, pkg.id, 'relationship', 'rel-glasgow')).held).toBe(true); // human hold kept
-    expect((await item(db, pkg.id, 'relationship', 'rel-glasgow')).holdSource).toBe('human');
+    expect((await item(db, pkg.id, 'relationship', 'rel-glasgow')).humanHeld).toBe(true);
+    expect((await item(db, pkg.id, 'relationship', 'rel-glasgow')).qaHeld).toBe(false);
   });
 });
 
