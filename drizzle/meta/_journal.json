@@ -36,6 +36,13 @@
       "when": 1784064281310,
       "tag": "0004_cycle8b_vocabulary_v1",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1784064607852,
+      "tag": "0005_cycle8b_package_revisions",
+      "breakpoints": true
     }
   ]
 }

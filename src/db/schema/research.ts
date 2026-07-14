@@ -35,6 +35,7 @@ import {
   researchPackageSectionEnum,
   researchPackageStatusEnum,
   researchRunStatusEnum,
+  packageEditKindEnum,
 } from './shared';
 import { entities } from './entities';
 
@@ -135,6 +136,9 @@ export const researchPackages = pgTable(
       onDelete: 'set null',
     }),
     promotedAt: timestamp('promoted_at', { withTimezone: true }),
+    /** Cycle 8B: set on any material candidate edit; compared against the
+     * latest QA result to decide whether QA is stale (blocks approval). */
+    lastEditedAt: timestamp('last_edited_at', { withTimezone: true }),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -247,6 +251,38 @@ export const packageDecisions = pgTable(
     unique('package_decisions_pkg_unique').on(t.packageId),
   ],
 );
+
+/** Cycle 8B — append-only audit trail of candidate edits made in the Studio
+ * before approval. The immutable submitted envelope is never changed; edits
+ * apply to normalized package items and are fully reconstructable from here. */
+export const researchPackageItemRevisions = pgTable(
+  'research_package_item_revisions',
+  {
+    id: text('id').primaryKey().$defaultFn(newId),
+    itemId: text('item_id')
+      .notNull()
+      .references(() => researchPackageItems.id, { onDelete: 'cascade' }),
+    packageId: text('package_id')
+      .notNull()
+      .references(() => researchPackages.id, { onDelete: 'cascade' }),
+    editKind: packageEditKindEnum('edit_kind').notNull(),
+    editor: text('editor').notNull(),
+    /** Deterministic before/after change record. */
+    beforeValue: jsonb('before_value').$type<Record<string, unknown>>(),
+    afterValue: jsonb('after_value').$type<Record<string, unknown>>(),
+    note: text('note'),
+    /** True when this edit invalidated a prior QA result. */
+    invalidatedQa: boolean('invalidated_qa').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('research_package_item_revisions_item_idx').on(t.itemId),
+    index('research_package_item_revisions_pkg_idx').on(t.packageId),
+  ],
+);
+
+export type ResearchPackageItemRevision = typeof researchPackageItemRevisions.$inferSelect;
+export type NewResearchPackageItemRevision = typeof researchPackageItemRevisions.$inferInsert;
 
 export type ResearchRun = typeof researchRuns.$inferSelect;
 export type NewResearchRun = typeof researchRuns.$inferInsert;

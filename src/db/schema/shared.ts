@@ -322,3 +322,14 @@ export const ENTITY_RESOLUTION_STATUSES = [
   'superseded_or_archived',
 ] as const;
 export type EntityResolutionStatus = (typeof ENTITY_RESOLUTION_STATUSES)[number];
+
+/** Cycle 8B — kind of an auditable candidate edit (revision history). */
+export const packageEditKindEnum = pgEnum('package_edit_kind', [
+  'field_edit',
+  'relationship_type',
+  'relationship_endpoints',
+  'canonical_match',
+  'hold',
+  'unhold',
+  'reject_item',
+]);

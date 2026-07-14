@@ -36,6 +36,7 @@ import { humanDecisionSchema, type HumanDecisionInput, type HeldItem } from '../
 import { assertTransition, PACKAGE_TRANSITIONS } from './state-machine';
 import { promoteWithinTx, type PromotionResult } from './promotion';
 import { recordJobOutcome } from './run';
+import { qaIsStale } from './edit';
 
 export interface DecisionResult {
   decision: PackageDecision;
@@ -135,6 +136,12 @@ export async function decidePackage(
     }
 
     const items = (await tx.query.researchPackageItems.findMany()).filter((i) => i.packageId === packageId);
+
+    // Cycle 8B: approval is blocked if a prior QA result is stale relative to
+    // candidate edits — QA must be rerun after material edits.
+    if ((input.decision === 'approve' || input.decision === 'approve_with_holds') && (await qaIsStale(tx, packageId))) {
+      throw new Error(`package ${packageId} was edited after QA; re-run QA before approval (status is qa_pending)`);
+    }
 
     // Every held identity must name a real item in THIS package (duplicates and
     // malformed identities are already rejected by the validator).

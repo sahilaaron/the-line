@@ -12,3 +12,5 @@ export * from './qa';
 export * from './decision';
 export * from './promotion';
 export * from './vocabulary';
+export * from './edit';
+export * from './graph-projection';
