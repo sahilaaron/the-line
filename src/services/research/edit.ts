@@ -12,8 +12,9 @@
  * reverts the package to qa_pending and blocks approval until QA is rerun.
  * Review actions (hold/unhold, reject) are NOT material.
  *
- * Holds carry provenance: `hold_source` is 'human' or 'qa'. A QA rerun clears
- * only obsolete QA-derived holds; a human hold persists until a human removes it.
+ * Holds carry INDEPENDENT provenance: humanHeld and qaHeld are separate booleans
+ * and may be true simultaneously; effective `held` is their OR. A QA rerun clears
+ * only qaHeld; a human unhold clears only humanHeld. Removing one preserves the other.
  */
 import { desc, eq } from 'drizzle-orm';
 import {
@@ -21,6 +22,7 @@ import {
   researchPackageItemRevisions,
   researchPackageItems,
   researchPackages,
+  entities,
   type ResearchPackageItem,
 } from '../../db/schema';
 import type { Db } from '../../db/repositories/types';
@@ -165,16 +167,20 @@ export async function changeRelationshipEndpoints(db: Db, itemId: string, source
   });
 }
 
-/** Human hold/unhold (review action — NOT material). Records provenance
- * 'human' so a later QA rerun never clears it. Atomic. */
+/** Human hold/unhold (review action — NOT material). Toggles ONLY the human
+ * hold; a current QA hold is INDEPENDENT and preserved. Effective `held` is the
+ * OR of the two, so removing a human hold cannot clear a simultaneous QA hold,
+ * and adding a human hold never overwrites the QA hold. Atomic. */
 export async function setItemHold(db: Db, itemId: string, held: boolean, editor: string): Promise<EditResult> {
   return db.transaction(async (tx) => {
     const { item, pkg } = await loadEditable(tx, itemId);
+    const effective = held || item.qaHeld; // preserve any current QA hold
     const [updated] = await tx.update(researchPackageItems)
-      .set({ held, holdSource: held ? 'human' : null })
+      .set({ humanHeld: held, held: effective })
       .where(eq(researchPackageItems.id, itemId)).returning();
     const r = await applyRevisionAndMaybeInvalidate(tx, item, pkg.status, held ? 'hold' : 'unhold', editor,
-      { held: item.held, holdSource: item.holdSource }, { held, holdSource: held ? 'human' : null }, false);
+      { humanHeld: item.humanHeld, qaHeld: item.qaHeld, held: item.held },
+      { humanHeld: held, qaHeld: item.qaHeld, held: effective }, false);
     return { item: updated, invalidatedQa: r.invalidatedQa, packageStatus: r.packageStatus };
   });
 }
@@ -189,11 +195,42 @@ export async function rejectPackageItem(db: Db, itemId: string, editor: string):
   });
 }
 
-/** Set/correct a candidate entity's canonical match (material -> invalidates QA). Atomic. */
+/** Controlled canonical-match statuses. A match to a real canonical entity, or
+ * an explicit "no match" verdict. Arbitrary free-text status is rejected. */
+export const MATCH_STATUSES_WITH_ENTITY = ['canonical_complete', 'canonical_incomplete', 'confirmed_match'] as const;
+export const MATCH_STATUSES_WITHOUT_ENTITY = ['new_candidate', 'no_match'] as const;
+export const ALL_MATCH_STATUSES = [...MATCH_STATUSES_WITH_ENTITY, ...MATCH_STATUSES_WITHOUT_ENTITY] as const;
+
+/**
+ * Set/correct a candidate entity's canonical match (material -> invalidates QA).
+ * Safe: a match status that asserts a canonical link REQUIRES a real canonical
+ * entity id (validated to exist); clearing the match REQUIRES a no-entity
+ * status. This prevents the previous bug where submitting a status with no id
+ * silently cleared a real match. Atomic.
+ */
 export async function correctCanonicalMatch(db: Db, itemId: string, matchEntityId: string | null, matchStatus: string | null, editor: string): Promise<EditResult> {
   return db.transaction(async (tx) => {
     const { item, pkg } = await loadEditable(tx, itemId);
     if (item.section !== 'entity') throw new Error('canonical match applies to entity items');
+
+    // Validate status vocabulary + status/id coherence.
+    if (matchStatus !== null && !ALL_MATCH_STATUSES.includes(matchStatus as never)) {
+      throw new Error(`invalid canonical match status "${matchStatus}"; allowed: ${ALL_MATCH_STATUSES.join(', ')}`);
+    }
+    if (matchEntityId) {
+      if (matchStatus === null || !MATCH_STATUSES_WITH_ENTITY.includes(matchStatus as never)) {
+        throw new Error(`a canonical match to an entity requires one of: ${MATCH_STATUSES_WITH_ENTITY.join(', ')}`);
+      }
+      const target = await tx.query.entities.findFirst({ where: eq(entities.id, matchEntityId) });
+      if (!target) throw new Error(`canonical entity ${matchEntityId} does not exist`);
+    } else {
+      // No id: only a no-entity status (or null to fully clear) is allowed —
+      // an asserting status without an id must NOT silently clear a real match.
+      if (matchStatus !== null && !MATCH_STATUSES_WITHOUT_ENTITY.includes(matchStatus as never)) {
+        throw new Error(`status "${matchStatus}" asserts a canonical link but no entity id was provided`);
+      }
+    }
+
     const before = { matchEntityId: item.matchEntityId, matchStatus: item.matchStatus };
     const [updated] = await tx.update(researchPackageItems).set({ matchEntityId, matchStatus }).where(eq(researchPackageItems.id, itemId)).returning();
     const r = await applyRevisionAndMaybeInvalidate(tx, item, pkg.status, 'canonical_match', editor, before, { matchEntityId, matchStatus }, true);

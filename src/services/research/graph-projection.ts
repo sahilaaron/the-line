@@ -7,10 +7,11 @@
  * match state are surfaced as machine-readable node/edge states (never
  * colour-only in the UI).
  */
-import { eq, inArray } from 'drizzle-orm';
+import { desc, eq, inArray } from 'drizzle-orm';
 import {
   entities,
   qaFlags,
+  qaResults,
   researchPackageItems,
   researchPackages,
 } from '../../db/schema';
@@ -37,7 +38,8 @@ export interface GraphNode {
   matchLabel: string | null;
   synthetic: boolean;
   held: boolean;
-  holdSource: string | null;
+  humanHeld: boolean;
+  qaHeld: boolean;
   qaFlagged: boolean;
   decision: string;
   year: number | null;
@@ -63,9 +65,14 @@ export interface GraphEdge {
   confidence: number | null;
   assertionClass: string | null;
   held: boolean;
+  humanHeld: boolean;
+  qaHeld: boolean;
   disputed: boolean;
   qaFlagged: boolean;
   decision: string;
+  sourceRefs: string[];
+  startYear: number | null;
+  endYear: number | null;
   payload: Record<string, unknown>;
 }
 
@@ -89,11 +96,33 @@ function nodePrimaryState(n: { synthetic: boolean; held: boolean; qaFlagged: boo
   return 'new_candidate';
 }
 
-export async function projectPackageGraph(db: Db, packageId: string): Promise<PackageGraph | undefined> {
+export interface ProjectOptions {
+  /** Developer mode: include synthetic candidates (marked, still unpromotable).
+   * Normal reviewers get a graph with synthetic items entirely excluded. This
+   * flag is set by the SERVER from an explicit developer-mode input, never by a
+   * client control. */
+  includeSynthetic?: boolean;
+}
+
+export async function projectPackageGraph(db: Db, packageId: string, opts: ProjectOptions = {}): Promise<PackageGraph | undefined> {
+  const includeSynthetic = opts.includeSynthetic ?? false;
   const pkg = await db.query.researchPackages.findFirst({ where: eq(researchPackages.id, packageId) });
   if (!pkg) return undefined;
-  const items = (await db.query.researchPackageItems.findMany({ where: eq(researchPackageItems.packageId, packageId) }));
-  const flags = await db.query.qaFlags.findMany({ where: eq(qaFlags.packageId, packageId) });
+  const allItems = (await db.query.researchPackageItems.findMany({ where: eq(researchPackageItems.packageId, packageId) }));
+  // Synthetic candidates are EXCLUDED entirely from a normal projection; only
+  // an explicit server-authorized developer mode includes them (still marked
+  // and never promotable). Edges touching a dropped synthetic node are dropped.
+  const items = includeSynthetic ? allItems : allItems.filter((i) => !i.isSynthetic);
+
+  // CURRENT QA state is derived from the LATEST qa_result only. Older results
+  // remain in the qa_results/qa_flags tables for audit history but never mark a
+  // node/edge as currently flagged — a passing rerun clears the current flags.
+  const latestQa = await db.query.qaResults.findFirst({
+    where: eq(qaResults.packageId, packageId),
+    orderBy: [desc(qaResults.createdAt)],
+  });
+  const flags = latestQa ? await db.query.qaFlags.findMany({ where: eq(qaFlags.qaResultId, latestQa.id) }) : [];
+
   const registry = await listRelationshipTypes(db);
   const regByKey = new Map(registry.map((r) => [r.key, r]));
   const matchIds = [...new Set(items.filter((i) => i.section === 'entity' && i.matchEntityId).map((i) => i.matchEntityId!))];
@@ -102,8 +131,12 @@ export async function projectPackageGraph(db: Db, packageId: string): Promise<Pa
   const flaggedKeys = new Set(flags.filter((f) => f.targetSection && f.targetRef).map((f) => `${f.targetSection} ${f.targetRef}`));
 
   const entityItems = items.filter((i) => i.section === 'entity').sort((a, b) => a.localRef.localeCompare(b.localRef));
+  const entityRefSet = new Set(entityItems.map((i) => i.localRef));
   const timeItems = items.filter((i) => i.section === 'time');
-  const relItems = items.filter((i) => i.section === 'relationship').sort((a, b) => a.localRef.localeCompare(b.localRef));
+  // Edges must reference two entity nodes that survive projection (drops edges
+  // to an excluded synthetic endpoint).
+  const relItems = items.filter((i) => i.section === 'relationship').sort((a, b) => a.localRef.localeCompare(b.localRef))
+    .filter((i) => { const p = i.payload as { sourceRef?: string; targetRef?: string }; return entityRefSet.has(p.sourceRef ?? '') && entityRefSet.has(p.targetRef ?? ''); });
 
   // earliest year per entity ref (for the chronology-layout toggle)
   const yearByRef = new Map<string, number>();
@@ -146,14 +179,27 @@ export async function projectPackageGraph(db: Db, packageId: string): Promise<Pa
       states, primaryState, matchEntityId: it.matchEntityId, matchStatus: it.matchStatus,
       matchSlug: it.matchEntityId ? matchById.get(it.matchEntityId)?.slug ?? null : null,
       matchLabel: it.matchEntityId ? matchById.get(it.matchEntityId)?.label ?? null : null,
-      synthetic: it.isSynthetic, held: it.held, holdSource: it.holdSource, qaFlagged, decision: it.decision,
+      synthetic: it.isSynthetic, held: it.held, humanHeld: it.humanHeld, qaHeld: it.qaHeld, qaFlagged, decision: it.decision,
       year: yearByRef.get(it.localRef) ?? null, x, y, payload: it.payload,
     };
   });
 
+  // Claim -> source links, so an edge can surface its citations.
+  const claimItems = items.filter((i) => i.section === 'claim');
+  const sourceRefsForRel = (relRef: string): string[] => {
+    const refs = new Set<string>();
+    for (const c of claimItems) {
+      const cp = c.payload as { subjectSection?: string; subjectRef?: string; sourceLinks?: { sourceRef: string }[] };
+      if (cp.subjectSection === 'relationship' && cp.subjectRef === relRef) {
+        for (const l of cp.sourceLinks ?? []) refs.add(l.sourceRef);
+      }
+    }
+    return [...refs];
+  };
+
   const categories = new Set<string>();
   const edges: GraphEdge[] = relItems.map((it) => {
-    const p = it.payload as { sourceRef: string; targetRef: string; typeKey: string; confidence?: number; assertionClass?: string; disputed?: boolean };
+    const p = it.payload as { sourceRef: string; targetRef: string; typeKey: string; confidence?: number; assertionClass?: string; disputed?: boolean; startYear?: number; endYear?: number };
     const reg = regByKey.get(p.typeKey);
     const category = reg?.category ?? 'general';
     categories.add(category);
@@ -172,7 +218,11 @@ export async function projectPackageGraph(db: Db, packageId: string): Promise<Pa
       typeKey: p.typeKey, forwardLabel: reg?.label ?? p.typeKey, inverseLabel: reg?.inverseLabel ?? p.typeKey,
       directionality: (reg?.directionality ?? 'directed') as 'directed' | 'symmetric', category, isProvisional,
       states, primaryState, confidence: p.confidence ?? null, assertionClass: p.assertionClass ?? null,
-      held: it.held, disputed, qaFlagged, decision: it.decision, payload: it.payload,
+      held: it.held, humanHeld: it.humanHeld, qaHeld: it.qaHeld, disputed, qaFlagged, decision: it.decision,
+      sourceRefs: sourceRefsForRel(it.localRef),
+      startYear: typeof p.startYear === 'number' ? p.startYear : null,
+      endYear: typeof p.endYear === 'number' ? p.endYear : null,
+      payload: it.payload,
     };
   });
 

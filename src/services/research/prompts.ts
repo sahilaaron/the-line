@@ -13,20 +13,26 @@ Repository workflow:
 
 Batch: run ${runId} (batch limit ${batchLimit}).
 
-Do exactly this:
+FIRST, choose ONE worker name and reuse it in EVERY command below (replace
+<your-name> everywhere — e.g. always "agent-1"). The lease is owned by that exact
+name: begin/heartbeat/release/fail will be REJECTED if the name does not match
+the name you claimed with. Do not omit --worker on any command (a missing
+--worker defaults to "cowork" and will not own your lease).
+
+Do exactly this (use the SAME <your-name> in every line):
 1. Claim the next job:  npm run research:agent -- claim-next-active --worker <your-name>
    (or:  npm run research:agent -- claim --run ${runId} --worker <your-name>)
-2. Mark work begun:     npm run research:agent -- begin --job <jobId>
+2. Mark work begun:     npm run research:agent -- begin --job <jobId> --worker <your-name>
 3. Heartbeat while researching (keeps your lease):
-                        npm run research:agent -- heartbeat --job <jobId>
+                        npm run research:agent -- heartbeat --job <jobId> --worker <your-name>
 4. Research the central entity EXTERNALLY (Wikipedia is a map/lead, not
    sufficient evidence for important claims). Gather sourced facts, chronology,
    relationships (use only ACTIVE registry types), claims + sources, honest
    media provenance, and suggested next entities.
 5. Submit a VALIDATED package file:
                         npm run research:agent -- submit --job <jobId> --file package.json
-6. If you must stop:    npm run research:agent -- release --job <jobId>
-   If it truly failed:  npm run research:agent -- fail --job <jobId> --reason "..."
+6. If you must stop:    npm run research:agent -- release --job <jobId> --worker <your-name>
+   If it truly failed:  npm run research:agent -- fail --job <jobId> --worker <your-name> --reason "..."
 
 Safety boundaries (non-negotiable):
 - One research job = one central entity, researched deeply.

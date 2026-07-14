@@ -172,6 +172,11 @@ export async function claimNextJob(db: Db, runId: string, opts: ClaimOptions = {
       fromDiscovery = true;
     }
 
+    // Reclaiming an expired lease is NOT a second batch item: the prior run
+    // already consumed a slot for this job. Capture the prior owner BEFORE the
+    // update so we can release exactly that slot.
+    const priorRunId = recovered ? chosen.claimedByRunId : null;
+
     // Claim it: guard against a racing claim via the status/lease predicate.
     const [claimed] = await tx
       .update(researchJobs)
@@ -202,10 +207,30 @@ export async function claimNextJob(db: Db, runId: string, opts: ClaimOptions = {
       // Someone else won the race between select and update.
       return { job: null, reason: 'empty_queue' as const };
     }
-    await tx
-      .update(researchRuns)
-      .set({ claimedCount: run.claimedCount + 1, updatedAt: new Date() })
-      .where(eq(researchRuns.id, runId));
+
+    // Counter bookkeeping. Consume exactly one slot for the NEW claim; if this
+    // was an expired-lease reclaim, first RELEASE the prior run's slot so the
+    // recovered job is never double-counted:
+    //  - same run reclaiming its own expired job -> net claimedCount unchanged;
+    //  - a different run reclaiming -> old run -1, new run +1.
+    if (priorRunId && priorRunId !== runId) {
+      const priorRun = await tx.query.researchRuns.findFirst({ where: eq(researchRuns.id, priorRunId) });
+      if (priorRun) {
+        await tx
+          .update(researchRuns)
+          .set({ claimedCount: Math.max(0, priorRun.claimedCount - 1), updatedAt: new Date() })
+          .where(eq(researchRuns.id, priorRunId));
+      }
+    }
+    if (priorRunId === runId) {
+      // Same-run reclaim: the slot this job already holds is retained (net 0).
+      await tx.update(researchRuns).set({ updatedAt: new Date() }).where(eq(researchRuns.id, runId));
+    } else {
+      await tx
+        .update(researchRuns)
+        .set({ claimedCount: run.claimedCount + 1, updatedAt: new Date() })
+        .where(eq(researchRuns.id, runId));
+    }
     return { job: claimed, recovered, fromDiscovery };
   });
 }
