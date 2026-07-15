@@ -10,7 +10,7 @@
  *  - only when no queued/frontier work exists does random discovery open a seed.
  */
 import { randomUUID } from 'node:crypto';
-import { and, eq, inArray, lt, or } from 'drizzle-orm';
+import { and, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import { researchJobs, researchRuns, type ResearchJob, type ResearchRun } from '../../db/schema';
 import type { Db } from '../../db/repositories/types';
 import { DEFAULT_QUEUE_CONFIG, type QueueConfig } from './config';
@@ -86,19 +86,30 @@ export async function recoverExpiredLeases(db: Db, now: Date = new Date()): Prom
   let recovered = 0;
   for (const job of expired) {
     await db.transaction(async (tx) => {
+      // Guard on the EXACT expired lease generation observed by the sweep:
+      // the same lock token AND the same (expired) lease timestamp. If the
+      // worker renewed the lease (leaseExpiresAt changed) or another worker
+      // reclaimed it (workerLock changed) after selection, this matches ZERO
+      // rows and the run counter is left untouched. claimedByRunId is kept in
+      // the flip so the freed slot can be decremented, then cleared.
       const [row] = await tx
         .update(researchJobs)
-        .set({ status: 'queued', workerLock: null, claimedByWorker: null, claimedByRunId: null, leaseExpiresAt: null, updatedAt: new Date() })
-        .where(and(eq(researchJobs.id, job.id), inArray(researchJobs.status, ['claimed', 'researching'])))
-        .returning({ id: researchJobs.id });
-      if (!row) return; // someone else changed it — skip
-      if (job.claimedByRunId) {
-        const run = await tx.query.researchRuns.findFirst({ where: eq(researchRuns.id, job.claimedByRunId) });
-        if (run) {
-          await tx.update(researchRuns)
-            .set({ claimedCount: Math.max(0, run.claimedCount - 1), updatedAt: new Date() })
-            .where(eq(researchRuns.id, job.claimedByRunId));
-        }
+        .set({ status: 'queued', workerLock: null, claimedByWorker: null, leaseExpiresAt: null, updatedAt: new Date() })
+        .where(and(
+          eq(researchJobs.id, job.id),
+          inArray(researchJobs.status, ['claimed', 'researching']),
+          job.workerLock == null ? isNull(researchJobs.workerLock) : eq(researchJobs.workerLock, job.workerLock),
+          job.leaseExpiresAt == null ? isNull(researchJobs.leaseExpiresAt) : eq(researchJobs.leaseExpiresAt, job.leaseExpiresAt),
+          lt(researchJobs.leaseExpiresAt, now),
+        ))
+        .returning({ id: researchJobs.id, runId: researchJobs.claimedByRunId });
+      if (!row) return; // renewed or reclaimed after the sweep selected it — skip
+      const priorRunId = row.runId;
+      await tx.update(researchJobs).set({ claimedByRunId: null }).where(eq(researchJobs.id, job.id));
+      if (priorRunId) {
+        await tx.update(researchRuns)
+          .set({ claimedCount: sql`GREATEST(0, ${researchRuns.claimedCount} - 1)`, updatedAt: new Date() })
+          .where(eq(researchRuns.id, priorRunId));
       }
       recovered += 1;
     });
@@ -187,11 +198,27 @@ export async function claimNextJob(db: Db, runId: string, opts: ClaimOptions = {
     }
 
     // Reclaiming an expired lease is NOT a second batch item: the prior run
-    // already consumed a slot for this job. Capture the prior owner BEFORE the
-    // update so we can release exactly that slot.
+    // already consumed a slot for this job. Capture the prior owner so we can
+    // release exactly that slot.
     const priorRunId = recovered ? chosen.claimedByRunId : null;
+    const sameRunReclaim = priorRunId === runId;
 
-    // Claim it: guard against a racing claim via the status/lease predicate.
+    // Reserve a slot ATOMICALLY for anything that consumes one (a fresh claim,
+    // a discovery seed, or a cross-run reclaim). The guarded conditional
+    // increment (claimedCount < batchLimit) is the authoritative gate: two
+    // concurrent claimers cannot oversubscribe the run. A same-run reclaim
+    // consumes no new slot, so it is skipped.
+    if (!sameRunReclaim) {
+      const reserved = await tx
+        .update(researchRuns)
+        .set({ claimedCount: sql`${researchRuns.claimedCount} + 1`, updatedAt: new Date() })
+        .where(and(eq(researchRuns.id, runId), lt(researchRuns.claimedCount, researchRuns.batchLimit)))
+        .returning({ id: researchRuns.id });
+      if (reserved.length === 0) return { job: null, reason: 'batch_limit_reached' as const };
+    }
+
+    // Claim the job. Guard against a racing claim via the status/lease
+    // predicate; on failure the reservation above rolls back with the tx.
     const [claimed] = await tx
       .update(researchJobs)
       .set({
@@ -206,7 +233,6 @@ export async function claimNextJob(db: Db, runId: string, opts: ClaimOptions = {
       .where(
         and(
           eq(researchJobs.id, chosen.id),
-          // still claimable: queued, or an expired-lease recovery
           or(
             eq(researchJobs.status, 'queued'),
             and(
@@ -218,32 +244,16 @@ export async function claimNextJob(db: Db, runId: string, opts: ClaimOptions = {
       )
       .returning();
     if (!claimed) {
-      // Someone else won the race between select and update.
-      return { job: null, reason: 'empty_queue' as const };
+      // Someone else won the race between select and update — roll back.
+      throw new Error('claim race: selected job was taken concurrently');
     }
 
-    // Counter bookkeeping. Consume exactly one slot for the NEW claim; if this
-    // was an expired-lease reclaim, first RELEASE the prior run's slot so the
-    // recovered job is never double-counted:
-    //  - same run reclaiming its own expired job -> net claimedCount unchanged;
-    //  - a different run reclaiming -> old run -1, new run +1.
+    // A cross-run reclaim frees the FORMER run's slot exactly once.
     if (priorRunId && priorRunId !== runId) {
-      const priorRun = await tx.query.researchRuns.findFirst({ where: eq(researchRuns.id, priorRunId) });
-      if (priorRun) {
-        await tx
-          .update(researchRuns)
-          .set({ claimedCount: Math.max(0, priorRun.claimedCount - 1), updatedAt: new Date() })
-          .where(eq(researchRuns.id, priorRunId));
-      }
-    }
-    if (priorRunId === runId) {
-      // Same-run reclaim: the slot this job already holds is retained (net 0).
-      await tx.update(researchRuns).set({ updatedAt: new Date() }).where(eq(researchRuns.id, runId));
-    } else {
       await tx
         .update(researchRuns)
-        .set({ claimedCount: run.claimedCount + 1, updatedAt: new Date() })
-        .where(eq(researchRuns.id, runId));
+        .set({ claimedCount: sql`GREATEST(0, ${researchRuns.claimedCount} - 1)`, updatedAt: new Date() })
+        .where(eq(researchRuns.id, priorRunId));
     }
     return { job: claimed, recovered, fromDiscovery };
   });

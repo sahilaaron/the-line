@@ -3,8 +3,8 @@
  * THESE commands (no Anthropic API billing) to participate in the daily flow:
  *
  *   npm run research:agent -- create-run --limit 5
- *   npm run research:agent -- claim --run <runId> [--worker cowork]
- *   npm run research:agent -- submit --job <jobId> --worker <your-name> --file package.json
+ *   npm run research:agent -- claim --run <runId> --worker <your-name>
+ *   npm run research:agent -- submit --job <jobId> --worker <your-name> --lease-token <token> --file package.json
  *   npm run research:agent -- qa --package <pkgId> --file qa.json
  *   npm run research:agent -- status
  *
@@ -26,6 +26,11 @@ import { jobDisplayState, activeAgentCount } from '../services/research/display-
 function arg(flag: string): string | undefined {
   const i = process.argv.indexOf(flag);
   return i === -1 ? undefined : process.argv[i + 1];
+}
+function requireArg(flag: string): string {
+  const v = arg(flag);
+  if (!v) throw new Error(`missing required ${flag}`);
+  return v;
 }
 
 async function main() {
@@ -50,7 +55,7 @@ async function main() {
         worker: arg('--worker') ?? 'cowork',
         discovery: seeds.length ? deterministicDiscoveryAdapter(seeds) : undefined,
       });
-      console.log(JSON.stringify(res.job ? { jobId: res.job.id, title: res.job.centralTitle, url: res.job.centralUrl, origin: res.job.origin, focusNote: res.job.focusNote, recovered: res.recovered, fromDiscovery: res.fromDiscovery } : { job: null, reason: res.reason }, null, 2));
+      console.log(JSON.stringify(res.job ? { jobId: res.job.id, worker: arg('--worker') ?? 'cowork', leaseToken: res.job.workerLock, leaseExpiresAt: res.job.leaseExpiresAt, runId: res.job.claimedByRunId, title: res.job.centralTitle, url: res.job.centralUrl, origin: res.job.origin, focusNote: res.job.focusNote, recovered: res.recovered, fromDiscovery: res.fromDiscovery } : { job: null, reason: res.reason }, null, 2));
       break;
     }
     case 'submit': {
@@ -58,7 +63,7 @@ async function main() {
       const file = arg('--file');
       if (!jobId || !file) throw new Error('submit requires --job <jobId> --file <path>');
       const envelope = JSON.parse(fs.readFileSync(file, 'utf8'));
-      const res = await submitPackage(db, jobId, envelope, { submittedBy: arg('--by') ?? arg('--worker'), worker: arg('--worker') });
+      const res = await submitPackage(db, jobId, envelope, { worker: requireArg('--worker'), leaseToken: requireArg('--lease-token') });
       console.log(JSON.stringify({ packageId: res.package.id, created: res.created, status: res.package.status }, null, 2));
       break;
     }
@@ -105,31 +110,32 @@ async function main() {
         await closeDevClient();
         process.exit(2);
       }
-      console.log(JSON.stringify(res.job ? { runId: res.runId, jobId: res.job.id, title: res.job.centralTitle, origin: res.job.origin } : { job: null, reason: res.reason }, null, 2));
+      console.log(JSON.stringify(res.job ? { runId: res.runId, jobId: res.job.id, worker: arg('--worker') ?? 'cowork', leaseToken: res.job.workerLock, leaseExpiresAt: res.job.leaseExpiresAt, title: res.job.centralTitle, origin: res.job.origin } : { job: null, reason: res.reason }, null, 2));
       break;
     }
     case 'begin': {
-      const j = await beginJob(db, arg('--job')!, arg('--worker') ?? 'cowork');
+      const j = await beginJob(db, requireArg('--job'), requireArg('--worker'), requireArg('--lease-token'));
       console.log(JSON.stringify({ jobId: j.id, status: j.status, leaseExpiresAt: j.leaseExpiresAt }, null, 2));
       break;
     }
     case 'heartbeat': {
-      const j = await heartbeatJob(db, arg('--job')!, arg('--worker') ?? 'cowork');
+      const j = await heartbeatJob(db, requireArg('--job'), requireArg('--worker'), requireArg('--lease-token'));
       console.log(JSON.stringify({ jobId: j.id, leaseExpiresAt: j.leaseExpiresAt }, null, 2));
       break;
     }
     case 'release': {
-      const j = await releaseJob(db, arg('--job')!, arg('--worker') ?? 'cowork');
+      const j = await releaseJob(db, requireArg('--job'), requireArg('--worker'), requireArg('--lease-token'));
       console.log(JSON.stringify({ jobId: j.id, status: j.status }, null, 2));
       break;
     }
     case 'fail': {
-      const j = await failJob(db, arg('--job')!, arg('--reason') ?? 'unspecified', arg('--worker') ?? 'cowork');
+      const j = await failJob(db, requireArg('--job'), arg('--reason') ?? 'unspecified', requireArg('--worker'), requireArg('--lease-token'));
       console.log(JSON.stringify({ jobId: j.id, status: j.status, lastError: j.lastError }, null, 2));
       break;
     }
     default:
       console.log('commands: create-run | claim | claim-next-active | begin | heartbeat | release | fail | active-runs | submit | qa | status');
+      console.log('lease commands (begin|heartbeat|release|fail|submit) require --worker <name> --lease-token <token from claim>');
   }
   await closeDevClient();
 }

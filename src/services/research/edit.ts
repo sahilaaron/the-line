@@ -37,7 +37,7 @@ import { ALL_MATCH_STATUSES, MATCH_STATUSES_WITHOUT_ENTITY, kindsCompatible, der
 export { ALL_MATCH_STATUSES, MATCH_STATUSES_WITH_ENTITY, MATCH_STATUSES_WITHOUT_ENTITY, kindsCompatible, deriveMatchStatus } from './match-compat';
 
 const EDITABLE_STATUSES = new Set(['submitted', 'qa_pending', 'qa_complete', 'in_review', 'returned']);
-type EditKind = 'field_edit' | 'relationship_type' | 'relationship_endpoints' | 'canonical_match' | 'hold' | 'unhold' | 'reject_item';
+type EditKind = 'field_edit' | 'relationship_type' | 'relationship_endpoints' | 'canonical_match' | 'hold' | 'unhold' | 'reject_item' | 'clear_agent_hold' | 'confirm_agent_hold';
 
 export interface EditResult {
   item: ResearchPackageItem;
@@ -302,6 +302,53 @@ export async function searchCanonicalMatchTargets(
     .orderBy(entities.label)
     .limit(limit);
   return rows.map((r) => ({ ...r, matchStatus: deriveMatchStatus(r.graphStatus) }));
+}
+
+/**
+ * Governed human resolution of an AGENT-proposed hold — "Clear agent hold". The
+ * reviewer determined the item does NOT need to remain held: clears agentHeld
+ * only, preserves humanHeld and qaHeld, recomputes effective held. Atomic; a
+ * revision records the prior and resulting hold sources, reviewer, timestamp and
+ * reason. Allowed only before a final package decision (loadEditable enforces
+ * this). It never touches a QA or human hold. */
+export async function clearAgentHold(db: Db, itemId: string, editor: string, reason?: string): Promise<EditResult> {
+  return db.transaction(async (tx) => {
+    const { item, pkg } = await loadEditable(tx, itemId);
+    if (!item.agentHeld) throw new Error(`item ${itemId} has no agent hold to clear`);
+    const effective = item.humanHeld || item.qaHeld;
+    const [updated] = await tx.update(researchPackageItems)
+      .set({ agentHeld: false, held: effective })
+      .where(eq(researchPackageItems.id, itemId)).returning();
+    const r = await applyRevisionAndMaybeInvalidate(
+      tx, item, pkg.status, 'clear_agent_hold', editor,
+      { humanHeld: item.humanHeld, qaHeld: item.qaHeld, agentHeld: true, held: item.held },
+      { humanHeld: item.humanHeld, qaHeld: item.qaHeld, agentHeld: false, held: effective },
+      false, reason ?? 'reviewer cleared the agent-proposed hold',
+    );
+    return { item: updated, invalidatedQa: r.invalidatedQa, packageStatus: r.packageStatus };
+  });
+}
+
+/**
+ * Governed human resolution of an AGENT-proposed hold — "Confirm as human hold".
+ * The reviewer AGREES the item should remain held: transfers the agent hold into
+ * a HUMAN hold (humanHeld=true, agentHeld=false), preserves qaHeld, effective
+ * held stays true. Atomic + audited; allowed only before a final decision. */
+export async function confirmAgentHoldAsHuman(db: Db, itemId: string, editor: string, reason?: string): Promise<EditResult> {
+  return db.transaction(async (tx) => {
+    const { item, pkg } = await loadEditable(tx, itemId);
+    if (!item.agentHeld) throw new Error(`item ${itemId} has no agent hold to confirm`);
+    const [updated] = await tx.update(researchPackageItems)
+      .set({ agentHeld: false, humanHeld: true, held: true })
+      .where(eq(researchPackageItems.id, itemId)).returning();
+    const r = await applyRevisionAndMaybeInvalidate(
+      tx, item, pkg.status, 'confirm_agent_hold', editor,
+      { humanHeld: item.humanHeld, qaHeld: item.qaHeld, agentHeld: true, held: item.held },
+      { humanHeld: true, qaHeld: item.qaHeld, agentHeld: false, held: true },
+      false, reason ?? 'reviewer confirmed the agent hold as a human hold',
+    );
+    return { item: updated, invalidatedQa: r.invalidatedQa, packageStatus: r.packageStatus };
+  });
 }
 
 /** Revision history for a package (append-only, newest first). */

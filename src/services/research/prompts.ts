@@ -13,26 +13,34 @@ Repository workflow:
 
 Batch: run ${runId} (batch limit ${batchLimit}).
 
-FIRST, choose ONE worker name and reuse it in EVERY command below (replace
-<your-name> everywhere — e.g. always "agent-1"). The lease is owned by that exact
-name: begin/heartbeat/release/fail will be REJECTED if the name does not match
-the name you claimed with. Do not omit --worker on any command (a missing
---worker defaults to "cowork" and will not own your lease).
+FIRST, choose ONE stable worker name and reuse it in EVERY command
+(replace <your-name> everywhere — e.g. always "agent-1").
 
-Do exactly this (use the SAME <your-name> in every line):
+The claim command returns a LEASE TOKEN (the job's leaseToken field). COPY that
+exact token and pass it as --lease-token on every subsequent command for this
+job. The lease is identified by BOTH your worker name AND that token:
+- begin / heartbeat / release / fail / submit are REJECTED unless the worker
+  name AND the lease token match the CURRENT lease;
+- if the job is reclaimed (by anyone, even you), a NEW token is issued and your
+  old token stops working immediately;
+- NEVER reuse a token after release, expiry, failure, submission, or reclaim —
+  claim again to get a fresh token.
+
+Do exactly this (use the SAME <your-name>, and the <token> printed by step 1):
 1. Claim the next job:  npm run research:agent -- claim-next-active --worker <your-name>
    (or:  npm run research:agent -- claim --run ${runId} --worker <your-name>)
-2. Mark work begun:     npm run research:agent -- begin --job <jobId> --worker <your-name>
+   -> note the "leaseToken" in the output; use it as <token> below.
+2. Mark work begun:     npm run research:agent -- begin --job <jobId> --worker <your-name> --lease-token <token>
 3. Heartbeat while researching (keeps your lease):
-                        npm run research:agent -- heartbeat --job <jobId> --worker <your-name>
+                        npm run research:agent -- heartbeat --job <jobId> --worker <your-name> --lease-token <token>
 4. Research the central entity EXTERNALLY (Wikipedia is a map/lead, not
    sufficient evidence for important claims). Gather sourced facts, chronology,
    relationships (use only ACTIVE registry types), claims + sources, honest
    media provenance, and suggested next entities.
-5. Submit a VALIDATED package file (as the SAME worker that claimed it):
-                        npm run research:agent -- submit --job <jobId> --worker <your-name> --file package.json
-6. If you must stop:    npm run research:agent -- release --job <jobId> --worker <your-name>
-   If it truly failed:  npm run research:agent -- fail --job <jobId> --worker <your-name> --reason "..."
+5. Submit a VALIDATED package file (same worker + same token):
+                        npm run research:agent -- submit --job <jobId> --worker <your-name> --lease-token <token> --file package.json
+6. If you must stop:    npm run research:agent -- release --job <jobId> --worker <your-name> --lease-token <token>
+   If it truly failed:  npm run research:agent -- fail --job <jobId> --worker <your-name> --lease-token <token> --reason "..."
 
 Safety boundaries (non-negotiable):
 - One research job = one central entity, researched deeply.

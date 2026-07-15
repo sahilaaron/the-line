@@ -3,20 +3,13 @@
  * through repositories/services (no raw SQL in UI/CLI). Atomic claims + lease
  * recovery are preserved so multiple CoWork agents can never hold one job.
  */
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { researchJobs, researchRuns, type ResearchJob, type ResearchRun } from '../../db/schema';
 import type { Db } from '../../db/repositories/types';
 import { getJob, nextJobSequence } from '../../db/repositories/research';
 import { DEFAULT_QUEUE_CONFIG } from './config';
 import { settleRun } from './run';
 import { claimNextJob, type ClaimOptions, type ClaimResult } from './queue';
-
-/** Exact worker ownership (never prefix-matched): 'agent-1' must not operate a
- * lease owned by 'agent-10'. */
-function assertOwner(job: ResearchJob, worker: string) {
-  const owner = job.claimedByWorker ?? job.workerLock?.split(':')[0] ?? null;
-  if (owner !== worker) throw new Error(`job ${job.id} lease is owned by "${owner ?? 'none'}", not "${worker}"`);
-}
 
 function assertQueued(job: ResearchJob) {
   if (job.status !== 'queued') throw new Error(`job ${job.id} is ${job.status}; only a queued (Awaiting Agent(s)) job can be edited/cancelled`);
@@ -61,74 +54,110 @@ export async function requeueJob(db: Db, jobId: string): Promise<ResearchJob> {
   return row;
 }
 
-/* ---- agent lease commands (begin / heartbeat / release / fail) ---- */
-export async function beginJob(db: Db, jobId: string, worker: string): Promise<ResearchJob> {
-  const job = await getJob(db, jobId);
+/* ---- agent lease commands (begin / heartbeat / release / fail) ----
+ *
+ * Cycle 8B v5: worker name alone is NOT a sufficient lease identity — a reused
+ * worker name after a reclaim must not let a STALE command mutate the NEWER
+ * lease. Every lease mutation is a SINGLE guarded update conditioned on the
+ * exact lease generation token (`workerLock`), the owning worker, and the
+ * allowed status. A stale command matches ZERO rows and changes nothing. */
+
+/** Explain why a guarded lease op matched no row (without leaking that a token
+ * was wrong to a non-owner beyond what they already know). */
+async function leaseRejected(exec: Db, jobId: string, op: string): Promise<never> {
+  const job = await exec.query.researchJobs.findFirst({ where: eq(researchJobs.id, jobId) });
   if (!job) throw new Error(`job ${jobId} not found`);
-  if (job.status !== 'claimed') throw new Error(`job ${jobId} is ${job.status}; begin requires a claimed job`);
-  assertOwner(job, worker);
+  throw new Error(`job ${jobId}: ${op} rejected — the job is ${job.status} and not held under the supplied worker + lease token (the lease may have expired, been reclaimed, or already ended)`);
+}
+
+export async function beginJob(db: Db, jobId: string, worker: string, leaseToken: string): Promise<ResearchJob> {
   const [row] = await db.update(researchJobs)
     .set({ status: 'researching', leaseExpiresAt: new Date(Date.now() + DEFAULT_QUEUE_CONFIG.leaseMs), updatedAt: new Date() })
-    .where(eq(researchJobs.id, jobId)).returning();
+    .where(and(
+      eq(researchJobs.id, jobId),
+      eq(researchJobs.status, 'claimed'),
+      eq(researchJobs.claimedByWorker, worker),
+      eq(researchJobs.workerLock, leaseToken),
+    ))
+    .returning();
+  if (!row) return leaseRejected(db, jobId, 'begin');
   return row;
 }
 
-export async function heartbeatJob(db: Db, jobId: string, worker: string): Promise<ResearchJob> {
-  const job = await getJob(db, jobId);
-  if (!job) throw new Error(`job ${jobId} not found`);
-  if (!['claimed', 'researching'].includes(job.status)) throw new Error(`job ${jobId} is ${job.status}; heartbeat requires a claimed/researching job`);
-  assertOwner(job, worker);
+export async function heartbeatJob(db: Db, jobId: string, worker: string, leaseToken: string): Promise<ResearchJob> {
   const [row] = await db.update(researchJobs)
     .set({ leaseExpiresAt: new Date(Date.now() + DEFAULT_QUEUE_CONFIG.leaseMs), updatedAt: new Date() })
-    .where(eq(researchJobs.id, jobId)).returning();
+    .where(and(
+      eq(researchJobs.id, jobId),
+      inArray(researchJobs.status, ['claimed', 'researching']),
+      eq(researchJobs.claimedByWorker, worker),
+      eq(researchJobs.workerLock, leaseToken),
+    ))
+    .returning();
+  if (!row) return leaseRejected(db, jobId, 'heartbeat');
   return row;
 }
 
 /** Release a claimed job back to the queue. Verifies worker ownership and
  * FREES the batch slot it consumed (decrements claimedCount). Atomic. */
-export async function releaseJob(db: Db, jobId: string, worker: string): Promise<ResearchJob> {
+export async function releaseJob(db: Db, jobId: string, worker: string, leaseToken: string): Promise<ResearchJob> {
   return db.transaction(async (tx) => {
-    const job = await tx.query.researchJobs.findFirst({ where: eq(researchJobs.id, jobId) });
-    if (!job) throw new Error(`job ${jobId} not found`);
-    if (!['claimed', 'researching'].includes(job.status)) throw new Error(`job ${jobId} is ${job.status}; release requires a claimed/researching job`);
-    assertOwner(job, worker);
-    // Guarded transition: only the row still in claimed/researching flips. A
-    // concurrent release/fail/reclaim that already moved it updates 0 rows, so
-    // the slot decrement below runs EXACTLY once.
+    // Guarded transition conditioned on the EXACT lease generation. A stale
+    // release (old token after a reclaim) or a concurrent second release
+    // matches 0 rows, so the atomic slot decrement runs EXACTLY once. The run
+    // id is captured from the flipped row BEFORE it is cleared.
     const [row] = await tx.update(researchJobs)
-      .set({ status: 'queued', workerLock: null, claimedByWorker: null, leaseExpiresAt: null, claimedByRunId: null, updatedAt: new Date() })
-      .where(and(eq(researchJobs.id, jobId), inArray(researchJobs.status, ['claimed', 'researching'])))
+      .set({ status: 'queued', workerLock: null, claimedByWorker: null, leaseExpiresAt: null, updatedAt: new Date() })
+      .where(and(
+        eq(researchJobs.id, jobId),
+        inArray(researchJobs.status, ['claimed', 'researching']),
+        eq(researchJobs.claimedByWorker, worker),
+        eq(researchJobs.workerLock, leaseToken),
+      ))
       .returning();
-    if (!row) throw new Error(`job ${jobId} changed state concurrently; release aborted`);
-    if (job.claimedByRunId) {
-      const run = await tx.query.researchRuns.findFirst({ where: eq(researchRuns.id, job.claimedByRunId) });
-      if (run) await tx.update(researchRuns).set({ claimedCount: Math.max(0, run.claimedCount - 1), updatedAt: new Date() }).where(eq(researchRuns.id, job.claimedByRunId));
+    if (!row) return leaseRejected(tx, jobId, 'release');
+    const priorRunId = row.claimedByRunId;
+    await tx.update(researchJobs).set({ claimedByRunId: null }).where(eq(researchJobs.id, jobId));
+    if (priorRunId) {
+      await tx.update(researchRuns)
+        .set({ claimedCount: sql`GREATEST(0, ${researchRuns.claimedCount} - 1)`, updatedAt: new Date() })
+        .where(eq(researchRuns.id, priorRunId));
     }
-    return row;
+    return { ...row, claimedByRunId: null };
   });
 }
 
 /** Fail a claimed job. Verifies ownership, records the outcome EXACTLY ONCE
  * (idempotent — a repeat on an already-failed job is a no-op), and settles the
  * run. A failed attempt CONSUMES its batch slot (claimedCount is not restored). */
-export async function failJob(db: Db, jobId: string, reason: string, worker: string): Promise<ResearchJob> {
+export async function failJob(db: Db, jobId: string, reason: string, worker: string, leaseToken: string): Promise<ResearchJob> {
   const runId = await db.transaction(async (tx) => {
-    const job = await tx.query.researchJobs.findFirst({ where: eq(researchJobs.id, jobId) });
-    if (!job) throw new Error(`job ${jobId} not found`);
-    if (job.status === 'failed') return null; // idempotent no-op
-    if (!['claimed', 'researching'].includes(job.status)) throw new Error(`job ${jobId} is ${job.status}; fail requires a claimed/researching job`);
-    assertOwner(job, worker);
-    // Guarded transition: increment failedCount ONLY if this call is the one that
-    // actually moved the job to failed (0 rows if a concurrent op won the race).
+    // Guarded transition conditioned on the EXACT lease generation. Only the one
+    // call that flips claimed/researching -> failed under this token increments
+    // failedCount. A stale fail (old token after a reclaim) or a concurrent
+    // second fail matches 0 rows. An already-failed job is an idempotent no-op.
     const flipped = await tx.update(researchJobs)
       .set({ status: 'failed', lastError: reason, workerLock: null, claimedByWorker: null, leaseExpiresAt: null, updatedAt: new Date() })
-      .where(and(eq(researchJobs.id, jobId), inArray(researchJobs.status, ['claimed', 'researching'])))
-      .returning({ id: researchJobs.id });
-    if (flipped.length === 0) return null; // lost the race — no double count
-    if (job.claimedByRunId) {
-      const run = await tx.query.researchRuns.findFirst({ where: eq(researchRuns.id, job.claimedByRunId) });
-      if (run) await tx.update(researchRuns).set({ failedCount: run.failedCount + 1, updatedAt: new Date() }).where(eq(researchRuns.id, job.claimedByRunId));
-      return job.claimedByRunId;
+      .where(and(
+        eq(researchJobs.id, jobId),
+        inArray(researchJobs.status, ['claimed', 'researching']),
+        eq(researchJobs.claimedByWorker, worker),
+        eq(researchJobs.workerLock, leaseToken),
+      ))
+      .returning({ id: researchJobs.id, runId: researchJobs.claimedByRunId });
+    if (flipped.length === 0) {
+      // Distinguish an idempotent no-op (already failed) from a stale/forbidden fail.
+      const cur = await tx.query.researchJobs.findFirst({ where: eq(researchJobs.id, jobId) });
+      if (!cur) throw new Error(`job ${jobId} not found`);
+      if (cur.status === 'failed') return null; // idempotent — counter already applied once
+      throw new Error(`job ${jobId}: fail rejected — the job is ${cur.status} and not held under the supplied worker + lease token`);
+    }
+    const rId = flipped[0].runId;
+    if (rId) {
+      await tx.update(researchRuns)
+        .set({ failedCount: sql`${researchRuns.failedCount} + 1`, updatedAt: new Date() })
+        .where(eq(researchRuns.id, rId));
+      return rId;
     }
     return null;
   });
