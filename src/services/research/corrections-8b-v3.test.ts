@@ -20,12 +20,12 @@ import { createJob } from '../../db/repositories/research';
 import { createEntity } from '../../db/repositories/entities';
 import { createRun } from './run';
 import { claimNextJob } from './queue';
-import { submitPackage } from './submit';
 import { recordQa } from './qa';
 import { setItemHold, correctCanonicalMatch } from './edit';
 import { projectPackageGraph } from './graph-projection';
 import { researchAgentPrompt } from './prompts';
 import { STEAM_ENGINE_ENVELOPE, STEAM_ENGINE_QA, seedSteamEngineExistingCanon } from './fixtures/steam-engine';
+import { stageSubmittedPackage } from './fixtures/staging';
 
 type DB = Awaited<ReturnType<typeof freshMigratedDb>>['db'];
 const runOf = async (db: DB, id: string) => (await db.query.researchRuns.findFirst({ where: eq(researchRuns.id, id) }))!;
@@ -33,8 +33,8 @@ const item = async (db: DB, pkgId: string, section: string, ref: string) =>
   (await db.query.researchPackageItems.findMany({ where: eq(researchPackageItems.packageId, pkgId) })).find((i) => i.section === section && i.localRef === ref)!;
 async function stageSteam(db: DB, withQa = true) {
   await seedSteamEngineExistingCanon(db);
-  const job = await createJob(db, { centralTitle: 'Steam engine', origin: 'manual', dedupeKey: `se-${Math.random()}`, status: 'claimed' });
-  const { package: pkg } = await submitPackage(db, job.id, STEAM_ENGINE_ENVELOPE, { trusted: true });
+  const { result } = await stageSubmittedPackage(db, STEAM_ENGINE_ENVELOPE, { title: 'Steam engine' });
+  const pkg = result.package;
   if (withQa) await recordQa(db, pkg.id, STEAM_ENGINE_QA);
   return pkg;
 }

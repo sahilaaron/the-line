@@ -15,6 +15,7 @@ import { failJob, releaseJob } from './queue-admin';
 import { submitPackage } from './submit';
 import { decidePackage } from './decision';
 import { editPackageItemFields, correctCanonicalMatch, searchCanonicalMatchTargets } from './edit';
+import { stageSubmittedPackage } from './fixtures/staging';
 
 type DB = Awaited<ReturnType<typeof freshMigratedDb>>['db'];
 const runOf = async (db: DB, id: string) => (await db.query.researchRuns.findFirst({ where: eq(researchRuns.id, id) }))!;
@@ -83,8 +84,8 @@ describe('1. batchLimit=1 expired-lease recovery', () => {
 describe('2. held package-envelope submission', () => {
   it('a held relationship/claim/media is insertable with AGENT provenance', async () => {
     const { db } = await freshMigratedDb();
-    const job = await createJob(db, { centralTitle: 'H', origin: 'manual', dedupeKey: 'h', status: 'claimed' });
-    const { package: pkg } = await submitPackage(db, job.id, heldEnvelope(), { trusted: true });
+    const { result } = await stageSubmittedPackage(db, heldEnvelope());
+    const pkg = result.package;
     const items = await db.query.researchPackageItems.findMany({ where: eq(researchPackageItems.packageId, pkg.id) });
     for (const ref of ['rel-1', 'claim-1', 'media-1']) {
       const it = items.find((i) => i.localRef === ref)!;
@@ -96,8 +97,8 @@ describe('2. held package-envelope submission', () => {
   });
   it('an initially-held candidate is EXCLUDED from promotion', async () => {
     const { db } = await freshMigratedDb();
-    const job = await createJob(db, { centralTitle: 'H2', origin: 'manual', dedupeKey: 'h2', status: 'claimed' });
-    const { package: pkg } = await submitPackage(db, job.id, heldEnvelope(), { trusted: true });
+    const { result } = await stageSubmittedPackage(db, heldEnvelope());
+    const pkg = result.package;
     await decidePackage(db, pkg.id, { decision: 'approve_with_holds', heldItems: [] });
     const rels = await db.query.relationships.findMany();
     expect(rels.length).toBe(0); // the held developed_by relationship was not promoted
@@ -110,28 +111,29 @@ describe('3. job submission lifecycle', () => {
   it('a queued (unclaimed) job cannot submit', async () => {
     const { db } = await freshMigratedDb();
     const job = await createJob(db, { centralTitle: 'Q', origin: 'manual', dedupeKey: 'q', status: 'queued' });
-    await expect(submitPackage(db, job.id, env, { worker: 'w1' })).rejects.toThrow(/claimed\/researching/);
+    await expect(submitPackage(db, job.id, env, { worker: 'w1', leaseToken: 'x' })).rejects.toThrow(/claimed\/researching/);
   });
   it('a wrong worker cannot submit', async () => {
     const { db } = await freshMigratedDb();
     const run = await createRun(db, { batchLimit: 5 });
     const job = await claimed(db, run.id, 'w1');
-    await expect(submitPackage(db, job.id, env, { worker: 'w2' })).rejects.toThrow(/owned by/);
+    await expect(submitPackage(db, job.id, env, { worker: 'w2', leaseToken: job.workerLock! })).rejects.toThrow(/owned by/);
   });
   it('an expired lease cannot submit', async () => {
     const { db } = await freshMigratedDb();
     const run = await createRun(db, { batchLimit: 5 });
     const job = await claimed(db, run.id, 'w1');
     await expire(db, job.id);
-    await expect(submitPackage(db, job.id, env, { worker: 'w1' })).rejects.toThrow(/lease has expired/);
+    await expect(submitPackage(db, job.id, env, { worker: 'w1', leaseToken: job.workerLock! })).rejects.toThrow(/lease has expired/);
   });
   it('the live owning worker can submit; identical replay is idempotent', async () => {
     const { db } = await freshMigratedDb();
     const run = await createRun(db, { batchLimit: 5 });
     const job = await claimed(db, run.id, 'w1');
-    const first = await submitPackage(db, job.id, env, { worker: 'w1' });
+    const tok = job.workerLock!;
+    const first = await submitPackage(db, job.id, env, { worker: 'w1', leaseToken: tok });
     expect(first.created).toBe(true);
-    const replay = await submitPackage(db, job.id, env, { worker: 'w1' });
+    const replay = await submitPackage(db, job.id, env, { worker: 'w1', leaseToken: tok });
     expect(replay.created).toBe(false);
     expect(replay.package.id).toBe(first.package.id);
   });
@@ -139,9 +141,9 @@ describe('3. job submission lifecycle', () => {
     const { db } = await freshMigratedDb();
     const run = await createRun(db, { batchLimit: 5 });
     const job = await claimed(db, run.id, 'w1');
-    await submitPackage(db, job.id, env, { worker: 'w1' });
+    await submitPackage(db, job.id, env, { worker: 'w1', leaseToken: job.workerLock! });
     const env2 = { ...env, entities: [{ ...env.entities[0], label: 'Life Subject EDITED' }] };
-    await expect(submitPackage(db, job.id, env2, { worker: 'w1' })).rejects.toThrow(/one package per job/);
+    await expect(submitPackage(db, job.id, env2, { worker: 'w1', leaseToken: job.workerLock! })).rejects.toThrow(/one package per job/);
     expect((await db.query.researchPackages.findMany({ where: eq(researchPackages.jobId, job.id) })).length).toBe(1);
   });
 });
@@ -149,9 +151,9 @@ describe('3. job submission lifecycle', () => {
 /* 4 — canonical matching hardening ------------------------------------ */
 describe('4. canonical matching hardening', () => {
   async function stage(db: DB, candidateKind: string) {
-    const job = await createJob(db, { centralTitle: 'M', origin: 'manual', dedupeKey: `m${Math.random()}`, status: 'claimed' });
     const env = { schemaVersion: 1 as const, entities: [{ ref: 'central', role: 'central' as const, slug: `cand-${Math.random().toString(36).slice(2)}`, label: 'Candidate', kind: candidateKind as never, classifications: [candidateKind] }] };
-    const { package: pkg } = await submitPackage(db, job.id, env, { trusted: true });
+    const { result } = await stageSubmittedPackage(db, env);
+    const pkg = result.package;
     const item = (await db.query.researchPackageItems.findMany({ where: eq(researchPackageItems.packageId, pkg.id) })).find((i) => i.section === 'entity')!;
     return item;
   }
@@ -197,8 +199,8 @@ describe('4. canonical matching hardening', () => {
 /* 5 — generic edit bypass --------------------------------------------- */
 describe('5. generic edit validation bypass', () => {
   async function relItem(db: DB) {
-    const job = await createJob(db, { centralTitle: 'E', origin: 'manual', dedupeKey: `e${Math.random()}`, status: 'claimed' });
-    const { package: pkg } = await submitPackage(db, job.id, heldEnvelope(), { trusted: true });
+    const { result } = await stageSubmittedPackage(db, heldEnvelope());
+    const pkg = result.package;
     return (await db.query.researchPackageItems.findMany({ where: eq(researchPackageItems.packageId, pkg.id) })).find((i) => i.section === 'relationship')!;
   }
   it('the generic editor rejects protected relationship fields', async () => {
@@ -211,8 +213,8 @@ describe('5. generic edit validation bypass', () => {
   });
   it('the generic editor rejects protected canonical-match fields on entities', async () => {
     const { db } = await freshMigratedDb();
-    const job = await createJob(db, { centralTitle: 'E2', origin: 'manual', dedupeKey: 'e2', status: 'claimed' });
-    const { package: pkg } = await submitPackage(db, job.id, heldEnvelope(), { trusted: true });
+    const { result } = await stageSubmittedPackage(db, heldEnvelope());
+    const pkg = result.package;
     const ent = (await db.query.researchPackageItems.findMany({ where: eq(researchPackageItems.packageId, pkg.id) })).find((i) => i.section === 'entity')!;
     await expect(editPackageItemFields(db, ent.id, { matchEntityId: 'x' }, 'Sahil')).rejects.toThrow(/generic editor/);
     await expect(editPackageItemFields(db, ent.id, { isSynthetic: true }, 'Sahil')).rejects.toThrow(/generic editor/);
@@ -225,7 +227,7 @@ describe('6. concurrent terminal ops are idempotent', () => {
     const { db } = await freshMigratedDb();
     const run = await createRun(db, { batchLimit: 5 });
     const job = await claimed(db, run.id, 'w1');
-    await Promise.allSettled([failJob(db, job.id, 'a', 'w1'), failJob(db, job.id, 'b', 'w1')]);
+    await Promise.allSettled([failJob(db, job.id, 'a', 'w1', job.workerLock!), failJob(db, job.id, 'b', 'w1', job.workerLock!)]);
     expect((await runOf(db, run.id)).failedCount).toBe(1);
     expect((await db.query.researchJobs.findFirst({ where: eq(researchJobs.id, job.id) }))!.status).toBe('failed');
   });
@@ -234,7 +236,7 @@ describe('6. concurrent terminal ops are idempotent', () => {
     const run = await createRun(db, { batchLimit: 5 });
     const job = await claimed(db, run.id, 'w1');
     expect((await runOf(db, run.id)).claimedCount).toBe(1);
-    await Promise.allSettled([releaseJob(db, job.id, 'w1'), releaseJob(db, job.id, 'w1')]);
+    await Promise.allSettled([releaseJob(db, job.id, 'w1', job.workerLock!), releaseJob(db, job.id, 'w1', job.workerLock!)]);
     expect((await runOf(db, run.id)).claimedCount).toBe(0);
   });
   it('two concurrent submissions create exactly one package', async () => {
@@ -242,7 +244,7 @@ describe('6. concurrent terminal ops are idempotent', () => {
     const run = await createRun(db, { batchLimit: 5 });
     const job = await claimed(db, run.id, 'w1');
     const env = { schemaVersion: 1 as const, entities: [{ ref: 'central', role: 'central' as const, slug: 'conc-subject', label: 'Conc', kind: 'concept' as const, classifications: ['concept'] }] };
-    await Promise.allSettled([submitPackage(db, job.id, env, { worker: 'w1' }), submitPackage(db, job.id, env, { worker: 'w1' })]);
+    await Promise.allSettled([submitPackage(db, job.id, env, { worker: 'w1', leaseToken: job.workerLock! }), submitPackage(db, job.id, env, { worker: 'w1', leaseToken: job.workerLock! })]);
     const pkgs = await db.query.researchPackages.findMany({ where: eq(researchPackages.jobId, job.id) });
     expect(pkgs.length).toBe(1);
     void entities;

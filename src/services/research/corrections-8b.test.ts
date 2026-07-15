@@ -11,11 +11,11 @@ import { createJob } from '../../db/repositories/research';
 import { createRun } from './run';
 import { claimNextJob, recoverExpiredLeases } from './queue';
 import { releaseJob, failJob, beginJob } from './queue-admin';
-import { submitPackage } from './submit';
 import { recordQa } from './qa';
 import { decidePackage } from './decision';
 import { editPackageItemFields, setItemHold, rejectPackageItem } from './edit';
 import { STEAM_ENGINE_ENVELOPE, STEAM_ENGINE_QA, seedSteamEngineExistingCanon } from './fixtures/steam-engine';
+import { stageSubmittedPackage } from './fixtures/staging';
 
 type DB = Awaited<ReturnType<typeof freshMigratedDb>>['db'];
 const runOf = async (db: DB, id: string) => (await db.query.researchRuns.findFirst({ where: eq(researchRuns.id, id) }))!;
@@ -23,8 +23,8 @@ const jobOf = async (db: DB, id: string) => (await db.query.researchJobs.findFir
 
 async function stageSteam(db: DB, withQa = true) {
   await seedSteamEngineExistingCanon(db);
-  const job = await createJob(db, { centralTitle: 'Steam engine', origin: 'manual', dedupeKey: `se-${Math.random()}`, status: 'claimed' });
-  const { package: pkg } = await submitPackage(db, job.id, STEAM_ENGINE_ENVELOPE, { trusted: true });
+  const { result } = await stageSubmittedPackage(db, STEAM_ENGINE_ENVELOPE, { title: 'Steam engine' });
+  const pkg = result.package;
   if (withQa) await recordQa(db, pkg.id, STEAM_ENGINE_QA);
   return pkg;
 }
@@ -38,7 +38,7 @@ describe('1. release restores batch capacity', () => {
     await createJob(db, { centralTitle: 'A', origin: 'manual', dedupeKey: 'a', status: 'queued' });
     const claim = await claimNextJob(db, run.id, { worker: 'w1' });
     expect((await runOf(db, run.id)).claimedCount).toBe(1);
-    const released = await releaseJob(db, claim.job!.id, 'w1');
+    const released = await releaseJob(db, claim.job!.id, 'w1', claim.job!.workerLock!);
     expect(released.status).toBe('queued');
     expect(released.leaseExpiresAt).toBeNull();
     expect(released.claimedByRunId).toBeNull();
@@ -64,13 +64,13 @@ describe('2. failing a job records + settles once', () => {
     const run = await createRun(db, { batchLimit: 1 });
     await createJob(db, { centralTitle: 'A', origin: 'manual', dedupeKey: 'a', status: 'queued' });
     const claim = await claimNextJob(db, run.id, { worker: 'w1' });
-    await failJob(db, claim.job!.id, 'no sources', 'w1');
+    await failJob(db, claim.job!.id, 'no sources', 'w1', claim.job!.workerLock!);
     let r = await runOf(db, run.id);
     expect((await jobOf(db, claim.job!.id)).status).toBe('failed');
     expect(r.failedCount).toBe(1);
     expect(r.status).toBe('completed'); // batch consumed by the failed attempt
     // idempotent replay
-    await failJob(db, claim.job!.id, 'no sources', 'w1');
+    await failJob(db, claim.job!.id, 'no sources', 'w1', claim.job!.workerLock!);
     r = await runOf(db, run.id);
     expect(r.failedCount).toBe(1);
   });
@@ -138,8 +138,8 @@ describe('6. classification preserves canonical kind', () => {
         schemaVersion: 1 as const,
         entities: [{ ref: 'central', role: 'central' as const, slug, label: `${cls} subject`, classifications: [cls] }],
       };
-      const job = await createJob(db, { centralTitle: cls, origin: 'manual', dedupeKey: cls, status: 'claimed' });
-      const { package: pkg } = await submitPackage(db, job.id, env, { trusted: true });
+      const { result } = await stageSubmittedPackage(db, env, { title: cls });
+      const pkg = result.package;
       await decidePackage(db, pkg.id, { decision: 'approve' });
       const ent = (await db.select().from(entities)).find((e) => e.slug === slug)!;
       expect(ent.kind).toBe(cls);
@@ -147,17 +147,21 @@ describe('6. classification preserves canonical kind', () => {
   );
 });
 
-describe('queue ownership (exact worker identity)', () => {
+describe('queue ownership (exact worker identity + lease token)', () => {
   it('agent-1 cannot operate a lease owned by agent-10', async () => {
     const { db } = await freshMigratedDb();
     const run = await createRun(db, { batchLimit: 5 });
     await createJob(db, { centralTitle: 'A', origin: 'manual', dedupeKey: 'a', status: 'queued' });
     const claim = await claimNextJob(db, run.id, { worker: 'agent-10' });
     const jid = claim.job!.id;
-    await expect(releaseJob(db, jid, 'agent-1')).rejects.toThrow(/owned by/i);
-    await expect(failJob(db, jid, 'x', 'agent-1')).rejects.toThrow(/owned by/i);
-    await expect(beginJob(db, jid, 'agent-1')).rejects.toThrow(/owned by/i);
-    // the true owner works
-    expect((await beginJob(db, jid, 'agent-10')).status).toBe('researching');
+    const tok = claim.job!.workerLock!;
+    // wrong worker (even with the real token) is rejected
+    await expect(releaseJob(db, jid, 'agent-1', tok)).rejects.toThrow(/rejected/i);
+    await expect(failJob(db, jid, 'x', 'agent-1', tok)).rejects.toThrow(/rejected/i);
+    await expect(beginJob(db, jid, 'agent-1', tok)).rejects.toThrow(/rejected/i);
+    // right worker but a stale/forged token is rejected
+    await expect(beginJob(db, jid, 'agent-10', 'stale-token')).rejects.toThrow(/rejected/i);
+    // the true owner with the current token works
+    expect((await beginJob(db, jid, 'agent-10', tok)).status).toBe('researching');
   });
 });

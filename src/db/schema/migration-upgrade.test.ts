@@ -62,4 +62,56 @@ describe('migration upgrade with existing held rows', () => {
     await pg.close();
     fs.rmSync(tmp, { recursive: true, force: true });
   });
+  it('0008 reparents extra v3 packages so UNIQUE(job_id) can be added without loss', async () => {
+    const journal = JSON.parse(fs.readFileSync(path.join(DRIZZLE, 'meta/_journal.json'), 'utf8'));
+    const upto7 = journal.entries.filter((e: { idx: number }) => e.idx <= 7);
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mig-dup-'));
+    fs.mkdirSync(path.join(tmp, 'meta'));
+    fs.writeFileSync(path.join(tmp, 'meta/_journal.json'), JSON.stringify({ ...journal, entries: upto7 }));
+    for (const e of upto7) fs.copyFileSync(path.join(DRIZZLE, `${e.tag}.sql`), path.join(tmp, `${e.tag}.sql`));
+
+    const { db, pg } = createTestDb();
+    await migrate(db, { migrationsFolder: tmp });
+
+    // One valid v3 job with TWO packages of different hashes, each with items.
+    await pg.exec(`INSERT INTO research_jobs (id, central_title, sequence, dedupe_key) VALUES ('jdup','Dup Subject',1,'jdup');`);
+    await pg.exec(`INSERT INTO research_packages (id, job_id, central_label, central_slug, envelope, submission_hash, submitted_at) VALUES
+      ('pk-a','jdup','Dup Subject','dup-subject','{"v":1}'::jsonb,'hash-a','2024-01-01T00:00:00Z'),
+      ('pk-b','jdup','Dup Subject','dup-subject','{"v":2}'::jsonb,'hash-b','2024-02-02T00:00:00Z');`);
+    await pg.exec(`INSERT INTO research_package_items (id, package_id, section, local_ref, payload) VALUES
+      ('it-a','pk-a','entity','central','{"ref":"central"}'::jsonb),
+      ('it-b','pk-b','entity','central','{"ref":"central"}'::jsonb);`);
+    await pg.exec(`INSERT INTO qa_results (id, package_id, recommendation) VALUES ('qa-a','pk-a','pass');`);
+
+    // Apply the constraint migration (+ the v5 column migration).
+    await execFile(pg, '0008_cycle8b_v4_agent_hold_one_package');
+    await execFile(pg, '0009_cycle8b_v5_submission_lease_token');
+
+    // Both packages preserved.
+    const pkgs = await pg.query<{ id: string; job_id: string }>(`SELECT id, job_id FROM research_packages ORDER BY id;`);
+    expect(pkgs.rows.length).toBe(2);
+    const byId = Object.fromEntries(pkgs.rows.map((r) => [r.id, r.job_id]));
+    // The earliest package keeps the original job; the extra is reparented.
+    expect(byId['pk-a']).toBe('jdup');
+    expect(byId['pk-b']).not.toBe('jdup');
+    // The generated job is real, honest, and unique.
+    const genJob = (await pg.query<{ id: string; status: string; dedupe_key: string; focus_note: string }>(
+      `SELECT id, status, dedupe_key, focus_note FROM research_jobs WHERE id = $1;`, [byId['pk-b']] as never,
+    )).rows[0];
+    expect(genJob.status).toBe('submitted');
+    expect(genJob.dedupe_key).toContain('migrated-0008');
+    expect(genJob.focus_note).toContain('one-package-per-job');
+    // Items and provenance are unchanged.
+    const items = await pg.query<{ id: string; package_id: string }>(`SELECT id, package_id FROM research_package_items ORDER BY id;`);
+    expect(items.rows.map((r) => `${r.id}:${r.package_id}`)).toEqual(['it-a:pk-a', 'it-b:pk-b']);
+    expect((await pg.query(`SELECT id FROM qa_results;`)).rows.length).toBe(1);
+
+    // The one-package-per-job constraint is now active.
+    await expect(
+      pg.exec(`INSERT INTO research_packages (id, job_id, central_label, central_slug, envelope, submission_hash) VALUES ('pk-c','jdup','x','x','{}'::jsonb,'hash-c');`),
+    ).rejects.toThrow();
+
+    await pg.close();
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
 });

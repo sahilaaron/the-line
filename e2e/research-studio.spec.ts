@@ -128,3 +128,23 @@ test('a node date field is editable and invalidates QA', async ({ page }) => {
   await page.getByTestId('save-node-date').first().click();
   await expect(page.getByTestId('pkg-status')).toHaveText('qa_pending');
 });
+
+test('agent-proposed holds show governed resolution controls and update provenance', async ({ page }) => {
+  await page.goto('/crm');
+  await page.getByRole('link', { name: 'Studio demo engine (provisional record)' }).first().click();
+  // rel-glasgow is seeded as an AGENT-proposed hold. Select it via the table.
+  await page.getByTestId('toggle-table').click();
+  await page.getByTestId('table-edge-rel-glasgow').click();
+  await expect(page.getByTestId('inspector')).toBeVisible();
+  // provenance shows an AGENT hold, and both governed controls are offered
+  await expect(page.getByTestId('hold-agent')).toBeVisible();
+  await expect(page.getByTestId('agent-hold-controls')).toBeVisible();
+  await expect(page.getByTestId('clear-agent-hold')).toBeVisible();
+  await expect(page.getByTestId('confirm-agent-hold')).toBeVisible();
+  // clear the agent hold -> the item is no longer held and controls disappear
+  await page.getByTestId('clear-agent-hold').click();
+  await page.getByTestId('toggle-table').click();
+  await page.getByTestId('table-edge-rel-glasgow').click();
+  await expect(page.getByTestId('agent-hold-controls')).toHaveCount(0);
+  await expect(page.getByTestId('hold-agent')).toHaveCount(0);
+});

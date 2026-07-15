@@ -58,16 +58,17 @@ describe('queue admin', () => {
     await createJob(db, { centralTitle: 'X', origin: 'manual', dedupeKey: 'x', status: 'queued' });
     const claim = await claimNextJob(db, run.id, { worker: 'agentA' });
     const jid = claim.job!.id;
-    const begun = await beginJob(db, jid, 'agentA');
+    const tok = claim.job!.workerLock!;
+    const begun = await beginJob(db, jid, 'agentA', tok);
     expect(begun.status).toBe('researching');
     const before = (await db.query.researchJobs.findFirst({ where: eq(researchJobs.id, jid) }))!.leaseExpiresAt!;
-    const beat = await heartbeatJob(db, jid, 'agentA');
+    const beat = await heartbeatJob(db, jid, 'agentA', tok);
     expect(beat.leaseExpiresAt!.getTime()).toBeGreaterThanOrEqual(before.getTime());
-    const released = await releaseJob(db, jid, 'agentA');
+    const released = await releaseJob(db, jid, 'agentA', tok);
     expect(released.status).toBe('queued');
     // re-claim + fail
     const c2 = await claimNextJob(db, run.id, { worker: 'agentB' });
-    const failed = await failJob(db, c2.job!.id, 'source unavailable', 'agentB');
+    const failed = await failJob(db, c2.job!.id, 'source unavailable', 'agentB', c2.job!.workerLock!);
     expect(failed.status).toBe('failed');
     expect(failed.lastError).toBe('source unavailable');
   });

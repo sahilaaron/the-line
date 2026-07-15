@@ -3,8 +3,6 @@ import { describe, it, expect } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { freshMigratedDb } from '../../db/testing/setup';
 import { researchPackageItems, researchPackages, yolCompositions } from '../../db/schema';
-import { createJob } from '../../db/repositories/research';
-import { submitPackage } from './submit';
 import { recordQa } from './qa';
 import { decidePackage } from './decision';
 import { projectPackageGraph } from './graph-projection';
@@ -15,11 +13,12 @@ import {
 import {
   STEAM_ENGINE_ENVELOPE, STEAM_ENGINE_QA, seedSteamEngineExistingCanon,
 } from './fixtures/steam-engine';
+import { stageSubmittedPackage } from './fixtures/staging';
 
 async function stageSteamEngine(db: Awaited<ReturnType<typeof freshMigratedDb>>['db'], withQa = true) {
   await seedSteamEngineExistingCanon(db);
-  const job = await createJob(db, { centralTitle: 'Steam engine', origin: 'manual', dedupeKey: `se-${Math.random()}`, status: 'claimed' });
-  const { package: pkg } = await submitPackage(db, job.id, STEAM_ENGINE_ENVELOPE, { trusted: true });
+  const { result } = await stageSubmittedPackage(db, STEAM_ENGINE_ENVELOPE, { title: 'Steam engine' });
+  const pkg = result.package;
   if (withQa) await recordQa(db, pkg.id, STEAM_ENGINE_QA);
   return pkg;
 }
