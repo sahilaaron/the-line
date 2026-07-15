@@ -358,3 +358,71 @@ their dedicated services (`changeRelationshipType`,
 (`npx vitest run src/services/research --testTimeout=30000`) so queue leasing,
 submission lifecycle, holds, promotion, editing and canonical matching are all
 exercised in CI. No failure-hiding retries on that step.
+
+## Cycle 8 final (v5) — kernel boundaries
+
+### Submission is always lifecycle-enforced (no trusted bypass)
+
+`submitPackage` has NO trusted/internal option. Every submission enforces:
+claimed/researching status, a live lease, exact worker ownership, and the current
+lease token. Seed/demo fixtures and tests submit through the real path (claim →
+submit with the claim's worker + lease token). There is no boolean, string,
+hidden field, CLI flag, or barrel export that disables enforcement.
+
+### Authenticated idempotent replays
+
+The package records the submitting `submitted_by` (worker) and
+`submission_lease_token`. An identical re-submission returns the existing package
+only when the caller presents the SAME worker AND the SAME lease token; a
+different/absent worker, a stale token, or different content is rejected.
+Authorization is never inferred from envelope contents. One package per job is
+also enforced by `UNIQUE(research_packages.job_id)`.
+
+### Generation-safe leases (worker + lease token)
+
+The lease-generation token is the job's `workerLock`, returned by `claim` (as
+`leaseToken`) alongside worker, expiry and run id. `begin`, `heartbeat`,
+`release`, `fail` and `submit` require `--worker` AND `--lease-token`, and every
+mutation is a single guarded UPDATE conditioned on job id + expected status +
+exact worker + exact lease token. A stale command (an old token after a reclaim)
+matches zero rows and changes nothing — including run counters. Reclaiming a job
+issues a new token and invalidates the old one immediately. Agents must copy the
+token from `claim` and reuse it for that claim's lifetime, never after release,
+expiry, failure, submission, or reclaim.
+
+`recoverExpiredLeases` conditions its recovery UPDATE on the EXACT expired lease
+generation it observed (same `workerLock` and same expired `leaseExpiresAt`), so
+a lease renewed or reclaimed after the sweep selected it is never cleared, and
+the run counter is decremented only when that exact lease is recovered. Claim
+counters use atomic SQL arithmetic and a guarded conditional reservation
+(`claimed_count < batch_limit`), so two concurrent claimers cannot oversubscribe
+a run. Same-run expired reclaim is net-zero; cross-run reclaim decrements the
+former run once and consumes one slot in the new run once.
+
+### One job → one package: forward-safe migration 0008
+
+Migration `0008` no longer fails on valid v3 data that has multiple packages per
+job. Before adding `UNIQUE(job_id)` it deterministically REPARENTS every extra
+package (all but the earliest, by `submitted_at` then `id`) to a generated
+`returned_correction` job with a deterministic unique id (`migjob-0008-<pkgId>`),
+a unique dedupe key, a valid sequence, `submitted` status, and an explanatory
+focus note, preserving each package's envelope, items, QA, decisions, revisions,
+provenance, run association and timestamps. The migration remains forward-only
+and still applies cleanly to an empty database.
+
+### Human resolution of agent holds
+
+An envelope `held: true` creates an independent `agent_held`. Two governed human
+actions resolve it before a final decision:
+
+- **Clear agent hold** — `agent_held=false`; `human_held`/`qa_held` preserved;
+  effective `held` recomputed. If nothing else holds it, the item becomes
+  promotable.
+- **Confirm as human hold** — `agent_held=false`, `human_held=true`; `qa_held`
+  preserved; effective `held` stays true (excluded from promotion).
+
+Both are atomic, append a revision recording prior/resulting hold sources +
+reviewer + timestamp + reason, and are allowed only before a final package
+decision. Ordinary human hold/unhold and QA reruns never touch agent provenance.
+The Studio inspector shows both controls only while an item has an unresolved
+agent hold, and the hold row reflects HUMAN / QA / AGENT provenance accurately.
