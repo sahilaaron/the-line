@@ -16,7 +16,7 @@
  * and may be true simultaneously; effective `held` is their OR. A QA rerun clears
  * only qaHeld; a human unhold clears only humanHeld. Removing one preserves the other.
  */
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq, ilike, inArray, or } from 'drizzle-orm';
 import {
   qaResults,
   researchPackageItemRevisions,
@@ -33,6 +33,8 @@ import {
   packageClaimSchema,
 } from '../../db/validation/research';
 import { validateRelationshipEndpoints, getRelationshipVocabulary } from './vocabulary';
+import { ALL_MATCH_STATUSES, MATCH_STATUSES_WITHOUT_ENTITY, kindsCompatible, deriveMatchStatus, compatibleKinds } from './match-compat';
+export { ALL_MATCH_STATUSES, MATCH_STATUSES_WITH_ENTITY, MATCH_STATUSES_WITHOUT_ENTITY, kindsCompatible, deriveMatchStatus } from './match-compat';
 
 const EDITABLE_STATUSES = new Set(['submitted', 'qa_pending', 'qa_complete', 'in_review', 'returned']);
 type EditKind = 'field_edit' | 'relationship_type' | 'relationship_endpoints' | 'canonical_match' | 'hold' | 'unhold' | 'reject_item';
@@ -114,10 +116,35 @@ function kindOfEntityRef(items: ResearchPackageItem[], ref: string): string | un
   return p.kind ?? p.classifications?.[0];
 }
 
-/** Material field edit of a candidate item's payload (validated + atomic). */
+/**
+ * Fields the GENERIC editor may change, per section (strict allowlist). Governed
+ * structural fields are deliberately EXCLUDED and must go through their dedicated
+ * services: relationship type -> changeRelationshipType; relationship endpoints
+ * -> changeRelationshipEndpoints; canonical match -> correctCanonicalMatch; holds
+ * -> setItemHold; item rejection -> rejectPackageItem. This closes the bypass
+ * where the generic field editor could rewrite typeKey/sourceRef/targetRef with
+ * only the loose Zod shape and skip registry/endpoint/synthetic governance.
+ */
+const GENERIC_EDITABLE_FIELDS: Record<string, ReadonlySet<string>> = {
+  entity: new Set(['label', 'slug', 'shortDescription', 'aliases', 'externalIds']),
+  relationship: new Set(['explanation', 'confidence', 'strength', 'assertionClass', 'disputed', 'startYear', 'endYear']),
+  time: new Set(['label', 'startYear', 'endYear', 'precision', 'note', 'confidence']),
+  claim: new Set(['text', 'assertionClass', 'confidence', 'verification']),
+};
+
+/** Material field edit of a candidate item's payload (allowlisted + validated + atomic). */
 export async function editPackageItemFields(db: Db, itemId: string, patch: Record<string, unknown>, editor: string): Promise<EditResult> {
   return db.transaction(async (tx) => {
     const { item, pkg } = await loadEditable(tx, itemId);
+    // Reject any field not on the section allowlist BEFORE touching anything —
+    // this is the server-side guard; hidden client form fields are not trusted.
+    const allowed = GENERIC_EDITABLE_FIELDS[item.section];
+    if (!allowed) throw new Error(`section ${item.section} has no generically-editable fields`);
+    for (const key of Object.keys(patch)) {
+      if (!allowed.has(key)) {
+        throw new Error(`field "${key}" cannot be changed through the generic editor; use the dedicated governed service`);
+      }
+    }
     const before = item.payload as Record<string, unknown>;
     const merged = { ...before, ...patch };
     const schema = SECTION_SCHEMAS[item.section as keyof typeof SECTION_SCHEMAS];
@@ -174,13 +201,13 @@ export async function changeRelationshipEndpoints(db: Db, itemId: string, source
 export async function setItemHold(db: Db, itemId: string, held: boolean, editor: string): Promise<EditResult> {
   return db.transaction(async (tx) => {
     const { item, pkg } = await loadEditable(tx, itemId);
-    const effective = held || item.qaHeld; // preserve any current QA hold
+    const effective = held || item.qaHeld || item.agentHeld; // preserve current QA/agent holds
     const [updated] = await tx.update(researchPackageItems)
       .set({ humanHeld: held, held: effective })
       .where(eq(researchPackageItems.id, itemId)).returning();
     const r = await applyRevisionAndMaybeInvalidate(tx, item, pkg.status, held ? 'hold' : 'unhold', editor,
-      { humanHeld: item.humanHeld, qaHeld: item.qaHeld, held: item.held },
-      { humanHeld: held, qaHeld: item.qaHeld, held: effective }, false);
+      { humanHeld: item.humanHeld, qaHeld: item.qaHeld, agentHeld: item.agentHeld, held: item.held },
+      { humanHeld: held, qaHeld: item.qaHeld, agentHeld: item.agentHeld, held: effective }, false);
     return { item: updated, invalidatedQa: r.invalidatedQa, packageStatus: r.packageStatus };
   });
 }
@@ -195,47 +222,86 @@ export async function rejectPackageItem(db: Db, itemId: string, editor: string):
   });
 }
 
-/** Controlled canonical-match statuses. A match to a real canonical entity, or
- * an explicit "no match" verdict. Arbitrary free-text status is rejected. */
-export const MATCH_STATUSES_WITH_ENTITY = ['canonical_complete', 'canonical_incomplete', 'confirmed_match'] as const;
-export const MATCH_STATUSES_WITHOUT_ENTITY = ['new_candidate', 'no_match'] as const;
-export const ALL_MATCH_STATUSES = [...MATCH_STATUSES_WITH_ENTITY, ...MATCH_STATUSES_WITHOUT_ENTITY] as const;
-
 /**
  * Set/correct a candidate entity's canonical match (material -> invalidates QA).
- * Safe: a match status that asserts a canonical link REQUIRES a real canonical
- * entity id (validated to exist); clearing the match REQUIRES a no-entity
- * status. This prevents the previous bug where submitting a status with no id
- * silently cleared a real match. Atomic.
+ * Hardened: the target must be a real, NON-synthetic canonical entity of a
+ * compatible kind; the status is DERIVED from the target's completeness (a
+ * caller-supplied status must agree or is rejected). Clearing requires a
+ * no-entity status, so a status can never silently clear a real match. These
+ * checks run server-side, so a forged client action cannot bypass them. Atomic.
  */
 export async function correctCanonicalMatch(db: Db, itemId: string, matchEntityId: string | null, matchStatus: string | null, editor: string): Promise<EditResult> {
   return db.transaction(async (tx) => {
     const { item, pkg } = await loadEditable(tx, itemId);
     if (item.section !== 'entity') throw new Error('canonical match applies to entity items');
 
-    // Validate status vocabulary + status/id coherence.
     if (matchStatus !== null && !ALL_MATCH_STATUSES.includes(matchStatus as never)) {
       throw new Error(`invalid canonical match status "${matchStatus}"; allowed: ${ALL_MATCH_STATUSES.join(', ')}`);
     }
+
+    let finalStatus: string | null;
     if (matchEntityId) {
-      if (matchStatus === null || !MATCH_STATUSES_WITH_ENTITY.includes(matchStatus as never)) {
-        throw new Error(`a canonical match to an entity requires one of: ${MATCH_STATUSES_WITH_ENTITY.join(', ')}`);
-      }
       const target = await tx.query.entities.findFirst({ where: eq(entities.id, matchEntityId) });
       if (!target) throw new Error(`canonical entity ${matchEntityId} does not exist`);
+      // Synthetic entities are never valid canonical-match targets — enforced on
+      // the server even if a client submits the id directly.
+      if (target.isSynthetic) throw new Error(`entity ${matchEntityId} is synthetic and cannot be a canonical-match target`);
+      // Kind compatibility.
+      const p = item.payload as { kind?: string; classifications?: string[] };
+      const candidateKind = p.kind ?? p.classifications?.[0] ?? 'concept';
+      if (!kindsCompatible(candidateKind, target.kind)) {
+        throw new Error(`incompatible kinds: a ${candidateKind} candidate cannot match a ${target.kind} entity`);
+      }
+      // Status is derived from the target; a supplied status must agree.
+      const derived = deriveMatchStatus(target.graphStatus);
+      if (matchStatus !== null && matchStatus !== derived) {
+        throw new Error(`match status must be "${derived}" (derived from the target's ${target.graphStatus} state), not "${matchStatus}"`);
+      }
+      finalStatus = derived;
     } else {
-      // No id: only a no-entity status (or null to fully clear) is allowed —
-      // an asserting status without an id must NOT silently clear a real match.
+      // No id: only a no-entity status (or null to fully clear) is allowed.
       if (matchStatus !== null && !MATCH_STATUSES_WITHOUT_ENTITY.includes(matchStatus as never)) {
         throw new Error(`status "${matchStatus}" asserts a canonical link but no entity id was provided`);
       }
+      finalStatus = matchStatus;
     }
 
     const before = { matchEntityId: item.matchEntityId, matchStatus: item.matchStatus };
-    const [updated] = await tx.update(researchPackageItems).set({ matchEntityId, matchStatus }).where(eq(researchPackageItems.id, itemId)).returning();
-    const r = await applyRevisionAndMaybeInvalidate(tx, item, pkg.status, 'canonical_match', editor, before, { matchEntityId, matchStatus }, true);
+    const [updated] = await tx.update(researchPackageItems).set({ matchEntityId, matchStatus: finalStatus }).where(eq(researchPackageItems.id, itemId)).returning();
+    const r = await applyRevisionAndMaybeInvalidate(tx, item, pkg.status, 'canonical_match', editor, before, { matchEntityId, matchStatus: finalStatus }, true);
     return { item: updated, invalidatedQa: r.invalidatedQa, packageStatus: r.packageStatus };
   });
+}
+
+export interface MatchTarget { id: string; label: string; slug: string; kind: string; graphStatus: string; matchStatus: string }
+
+/**
+ * Server-side, scalable search for valid canonical-match targets. Excludes
+ * synthetic entities and restricts to kinds compatible with the candidate, with
+ * a bounded page size (no silent "latest 300 rows" cap). The derived status is
+ * returned so the picker shows the status that WILL be applied.
+ */
+export async function searchCanonicalMatchTargets(
+  db: Db,
+  opts: { term?: string; candidateKind: string; limit?: number },
+): Promise<MatchTarget[]> {
+  const limit = Math.min(Math.max(opts.limit ?? 25, 1), 100);
+  const kinds = compatibleKinds(opts.candidateKind);
+  const term = (opts.term ?? '').trim();
+  const where = term
+    ? and(
+        eq(entities.isSynthetic, false),
+        inArray(entities.kind, kinds as never),
+        or(ilike(entities.label, `%${term}%`), ilike(entities.slug, `%${term}%`)),
+      )
+    : and(eq(entities.isSynthetic, false), inArray(entities.kind, kinds as never));
+  const rows = await db
+    .select({ id: entities.id, label: entities.label, slug: entities.slug, kind: entities.kind, graphStatus: entities.graphStatus })
+    .from(entities)
+    .where(where)
+    .orderBy(entities.label)
+    .limit(limit);
+  return rows.map((r) => ({ ...r, matchStatus: deriveMatchStatus(r.graphStatus) }));
 }
 
 /** Revision history for a package (append-only, newest first). */

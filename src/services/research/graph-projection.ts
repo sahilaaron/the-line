@@ -40,6 +40,7 @@ export interface GraphNode {
   held: boolean;
   humanHeld: boolean;
   qaHeld: boolean;
+  agentHeld: boolean;
   qaFlagged: boolean;
   decision: string;
   year: number | null;
@@ -67,6 +68,7 @@ export interface GraphEdge {
   held: boolean;
   humanHeld: boolean;
   qaHeld: boolean;
+  agentHeld: boolean;
   disputed: boolean;
   qaFlagged: boolean;
   decision: string;
@@ -179,7 +181,7 @@ export async function projectPackageGraph(db: Db, packageId: string, opts: Proje
       states, primaryState, matchEntityId: it.matchEntityId, matchStatus: it.matchStatus,
       matchSlug: it.matchEntityId ? matchById.get(it.matchEntityId)?.slug ?? null : null,
       matchLabel: it.matchEntityId ? matchById.get(it.matchEntityId)?.label ?? null : null,
-      synthetic: it.isSynthetic, held: it.held, humanHeld: it.humanHeld, qaHeld: it.qaHeld, qaFlagged, decision: it.decision,
+      synthetic: it.isSynthetic, held: it.held, humanHeld: it.humanHeld, qaHeld: it.qaHeld, agentHeld: it.agentHeld, qaFlagged, decision: it.decision,
       year: yearByRef.get(it.localRef) ?? null, x, y, payload: it.payload,
     };
   });
@@ -218,7 +220,7 @@ export async function projectPackageGraph(db: Db, packageId: string, opts: Proje
       typeKey: p.typeKey, forwardLabel: reg?.label ?? p.typeKey, inverseLabel: reg?.inverseLabel ?? p.typeKey,
       directionality: (reg?.directionality ?? 'directed') as 'directed' | 'symmetric', category, isProvisional,
       states, primaryState, confidence: p.confidence ?? null, assertionClass: p.assertionClass ?? null,
-      held: it.held, humanHeld: it.humanHeld, qaHeld: it.qaHeld, disputed, qaFlagged, decision: it.decision,
+      held: it.held, humanHeld: it.humanHeld, qaHeld: it.qaHeld, agentHeld: it.agentHeld, disputed, qaFlagged, decision: it.decision,
       sourceRefs: sourceRefsForRel(it.localRef),
       startYear: typeof p.startYear === 'number' ? p.startYear : null,
       endYear: typeof p.endYear === 'number' ? p.endYear : null,

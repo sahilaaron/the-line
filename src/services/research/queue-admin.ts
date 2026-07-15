@@ -92,9 +92,14 @@ export async function releaseJob(db: Db, jobId: string, worker: string): Promise
     if (!job) throw new Error(`job ${jobId} not found`);
     if (!['claimed', 'researching'].includes(job.status)) throw new Error(`job ${jobId} is ${job.status}; release requires a claimed/researching job`);
     assertOwner(job, worker);
+    // Guarded transition: only the row still in claimed/researching flips. A
+    // concurrent release/fail/reclaim that already moved it updates 0 rows, so
+    // the slot decrement below runs EXACTLY once.
     const [row] = await tx.update(researchJobs)
       .set({ status: 'queued', workerLock: null, claimedByWorker: null, leaseExpiresAt: null, claimedByRunId: null, updatedAt: new Date() })
-      .where(eq(researchJobs.id, jobId)).returning();
+      .where(and(eq(researchJobs.id, jobId), inArray(researchJobs.status, ['claimed', 'researching'])))
+      .returning();
+    if (!row) throw new Error(`job ${jobId} changed state concurrently; release aborted`);
     if (job.claimedByRunId) {
       const run = await tx.query.researchRuns.findFirst({ where: eq(researchRuns.id, job.claimedByRunId) });
       if (run) await tx.update(researchRuns).set({ claimedCount: Math.max(0, run.claimedCount - 1), updatedAt: new Date() }).where(eq(researchRuns.id, job.claimedByRunId));
@@ -113,9 +118,13 @@ export async function failJob(db: Db, jobId: string, reason: string, worker: str
     if (job.status === 'failed') return null; // idempotent no-op
     if (!['claimed', 'researching'].includes(job.status)) throw new Error(`job ${jobId} is ${job.status}; fail requires a claimed/researching job`);
     assertOwner(job, worker);
-    await tx.update(researchJobs)
+    // Guarded transition: increment failedCount ONLY if this call is the one that
+    // actually moved the job to failed (0 rows if a concurrent op won the race).
+    const flipped = await tx.update(researchJobs)
       .set({ status: 'failed', lastError: reason, workerLock: null, claimedByWorker: null, leaseExpiresAt: null, updatedAt: new Date() })
-      .where(eq(researchJobs.id, jobId));
+      .where(and(eq(researchJobs.id, jobId), inArray(researchJobs.status, ['claimed', 'researching'])))
+      .returning({ id: researchJobs.id });
+    if (flipped.length === 0) return null; // lost the race — no double count
     if (job.claimedByRunId) {
       const run = await tx.query.researchRuns.findFirst({ where: eq(researchRuns.id, job.claimedByRunId) });
       if (run) await tx.update(researchRuns).set({ failedCount: run.failedCount + 1, updatedAt: new Date() }).where(eq(researchRuns.id, job.claimedByRunId));
@@ -148,5 +157,3 @@ export async function claimNextForActiveRun(db: Db, opts: ClaimOptions = {}): Pr
   const res = await claimNextJob(db, runs[0].id, opts);
   return { ...res, runId: runs[0].id };
 }
-
-void and;

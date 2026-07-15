@@ -99,7 +99,7 @@ export async function recordQa(db: Db, packageId: string, rawContract: unknown):
     const priorQaHeld = (await tx.query.researchPackageItems.findMany({ where: eq(researchPackageItems.packageId, packageId) }))
       .filter((i) => i.qaHeld && !flaggedKeys.has(`${i.section} ${i.localRef}`));
     for (const it of priorQaHeld) {
-      await tx.update(researchPackageItems).set({ qaHeld: false, held: it.humanHeld }).where(eq(researchPackageItems.id, it.id));
+      await tx.update(researchPackageItems).set({ qaHeld: false, held: it.humanHeld || it.agentHeld }).where(eq(researchPackageItems.id, it.id));
     }
 
     if (pkg.status === 'submitted' || pkg.status === 'qa_pending') {

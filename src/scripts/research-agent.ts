@@ -4,7 +4,7 @@
  *
  *   npm run research:agent -- create-run --limit 5
  *   npm run research:agent -- claim --run <runId> [--worker cowork]
- *   npm run research:agent -- submit --job <jobId> --file package.json
+ *   npm run research:agent -- submit --job <jobId> --worker <your-name> --file package.json
  *   npm run research:agent -- qa --package <pkgId> --file qa.json
  *   npm run research:agent -- status
  *
@@ -58,7 +58,7 @@ async function main() {
       const file = arg('--file');
       if (!jobId || !file) throw new Error('submit requires --job <jobId> --file <path>');
       const envelope = JSON.parse(fs.readFileSync(file, 'utf8'));
-      const res = await submitPackage(db, jobId, envelope, { submittedBy: arg('--by') ?? 'cowork' });
+      const res = await submitPackage(db, jobId, envelope, { submittedBy: arg('--by') ?? arg('--worker'), worker: arg('--worker') });
       console.log(JSON.stringify({ packageId: res.package.id, created: res.created, status: res.package.status }, null, 2));
       break;
     }

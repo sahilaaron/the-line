@@ -121,7 +121,7 @@ export async function claimNextJob(db: Db, runId: string, opts: ClaimOptions = {
     const run = await tx.query.researchRuns.findFirst({ where: eq(researchRuns.id, runId) });
     if (!run) throw new Error(`run ${runId} not found`);
     if (run.status !== 'active' || run.stopRequested) return { job: null, reason: 'stopped' as const };
-    if (run.claimedCount >= run.batchLimit) return { job: null, reason: 'batch_limit_reached' as const };
+    const atLimit = run.claimedCount >= run.batchLimit;
 
     // candidate pool: queued + recoverable-expired-lease jobs
     const pool = await tx.query.researchJobs.findMany({
@@ -133,11 +133,25 @@ export async function claimNextJob(db: Db, runId: string, opts: ClaimOptions = {
         ),
       ),
     });
-    let chosen = selectNextJob(pool, run, now, config);
+    // Deterministic ordering; then apply capacity. A run AT its batch limit may
+    // still RECLAIM its OWN expired in-flight job (that job already holds a slot,
+    // so reclaiming it is net-zero) but may NOT consume a new slot for a
+    // different queued job or a fresh discovery seed. The capacity check must
+    // therefore come AFTER selection, restricted to same-run reclaims when full.
+    const eligible = orderJobs(pool.filter((j) => isClaimable(j, now)), config);
+    const isSameRunReclaim = (j: ResearchJob) => j.status !== 'queued' && j.claimedByRunId === runId;
+    let candidates = eligible;
+    if (atLimit) {
+      candidates = eligible.filter(isSameRunReclaim);
+      if (candidates.length === 0) return { job: null, reason: 'batch_limit_reached' as const };
+    }
+    let chosen: ResearchJob | null = candidates[0] ?? null;
     let fromDiscovery = false;
     const recovered = chosen != null && chosen.status !== 'queued';
 
-    // No queued/frontier work: try injected random discovery.
+    // No queued/frontier work: try injected random discovery (consumes a slot,
+    // so only when NOT at the batch limit — guaranteed here since at-limit runs
+    // with no same-run reclaim already returned above).
     if (!chosen) {
       const seed = await discovery.nextSeed();
       if (!seed) return { job: null, reason: 'empty_queue' as const };

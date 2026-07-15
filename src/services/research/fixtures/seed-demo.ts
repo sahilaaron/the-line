@@ -67,7 +67,7 @@ export async function seedResearchDemo(db: Db): Promise<SeedDemoResult> {
     });
     const claim = await claimNextJob(db, run.id, { worker: 'seed' });
     if (claim.job) {
-      const { package: pkg } = await submitPackage(db, claim.job.id, STEAM_ENGINE_ENVELOPE, { submittedBy: 'seed' });
+      const { package: pkg } = await submitPackage(db, claim.job.id, STEAM_ENGINE_ENVELOPE, { submittedBy: 'seed', trusted: true });
       await recordQa(db, pkg.id, STEAM_ENGINE_QA);
       steamPackageId = pkg.id;
     }
@@ -87,7 +87,7 @@ export async function seedResearchDemo(db: Db): Promise<SeedDemoResult> {
     await captureManualJob(db, { title: "Hero's engine (provisional record)", priority: 40 });
     const dupClaim = await claimNextJob(db, run.id, { worker: 'seed' });
     if (dupClaim.job) {
-      const { package: dupPkg } = await submitPackage(db, dupClaim.job.id, HERO_ENVELOPE, { submittedBy: 'seed' });
+      const { package: dupPkg } = await submitPackage(db, dupClaim.job.id, HERO_ENVELOPE, { submittedBy: 'seed', trusted: true });
       await recordQa(db, dupPkg.id, { recommendation: 'duplicate', summary: 'Looks like the Aeolipile.', flags: [] });
       heroPackageId = dupPkg.id;
     }
@@ -105,7 +105,7 @@ export async function seedResearchDemo(db: Db): Promise<SeedDemoResult> {
     await captureManualJob(db, { title: 'Studio demo engine (provisional record)', priority: 30 });
     const stClaim = await claimNextJob(db, run.id, { worker: 'seed' });
     if (stClaim.job) {
-      const { package: stPkg } = await submitPackage(db, stClaim.job.id, editableEnvelope, { submittedBy: 'seed' });
+      const { package: stPkg } = await submitPackage(db, stClaim.job.id, editableEnvelope, { submittedBy: 'seed', trusted: true });
       await recordQa(db, stPkg.id, STEAM_ENGINE_QA);
       void stPkg;
     }

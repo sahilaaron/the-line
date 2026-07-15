@@ -29,8 +29,8 @@ Do exactly this (use the SAME <your-name> in every line):
    sufficient evidence for important claims). Gather sourced facts, chronology,
    relationships (use only ACTIVE registry types), claims + sources, honest
    media provenance, and suggested next entities.
-5. Submit a VALIDATED package file:
-                        npm run research:agent -- submit --job <jobId> --file package.json
+5. Submit a VALIDATED package file (as the SAME worker that claimed it):
+                        npm run research:agent -- submit --job <jobId> --worker <your-name> --file package.json
 6. If you must stop:    npm run research:agent -- release --job <jobId> --worker <your-name>
    If it truly failed:  npm run research:agent -- fail --job <jobId> --worker <your-name> --reason "..."
 
