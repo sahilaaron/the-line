@@ -77,6 +77,8 @@ import {
   rejectPackageItem,
   correctCanonicalMatch,
   searchCanonicalMatchTargets,
+  clearAgentHold,
+  confirmAgentHoldAsHuman,
   type MatchTarget,
 } from '@/src/services/research/edit';
 
@@ -157,6 +159,22 @@ export async function correctMatchAction(formData: FormData) {
 export async function searchMatchTargetsAction(term: string, candidateKind: string): Promise<MatchTarget[]> {
   const db = getDevDb();
   return searchCanonicalMatchTargets(db, { term, candidateKind, limit: 25 });
+}
+
+export async function clearAgentHoldAction(formData: FormData) {
+  const db = getDevDb();
+  const pkgId = String(formData.get('packageId') ?? '');
+  const itemId = String(formData.get('itemId') ?? '');
+  if (itemId) await clearAgentHold(db, itemId, 'Sahil');
+  REVALIDATE(pkgId);
+}
+
+export async function confirmAgentHoldAction(formData: FormData) {
+  const db = getDevDb();
+  const pkgId = String(formData.get('packageId') ?? '');
+  const itemId = String(formData.get('itemId') ?? '');
+  if (itemId) await confirmAgentHoldAsHuman(db, itemId, 'Sahil');
+  REVALIDATE(pkgId);
 }
 
 /* ---- Cycle 8B: honest queue management actions ---- */

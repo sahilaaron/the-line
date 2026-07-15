@@ -22,6 +22,7 @@ import s from '../../../crm.module.css';
 import {
   editItemFieldsAction, changeRelTypeAction, changeRelEndpointsAction,
   holdItemAction, rejectItemAction, correctMatchAction, searchMatchTargetsAction,
+  clearAgentHoldAction, confirmAgentHoldAction,
 } from '../../../actions';
 
 type GNode = {
@@ -284,6 +285,28 @@ function MatchEditor({ node, packageId }: { node: GNode; packageId: string }) {
   );
 }
 
+/** When an item carries an AGENT-proposed hold, the human reviewer resolves it
+ * explicitly: clear it (drop the agent hold) or confirm it as a human hold. */
+function AgentHoldControls({ packageId, itemId }: { packageId: string; itemId: string }) {
+  return (
+    <div data-testid="agent-hold-controls" className={s.card} style={{ marginTop: '0.4rem', background: '#0b0e14', borderColor: '#6a5626' }}>
+      <div className={s.muted} style={{ fontSize: '0.72rem', marginBottom: 4 }}>
+        <b>Agent-proposed hold.</b> The research agent flagged this item to hold. Resolve it:
+      </div>
+      <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+        <form action={clearAgentHoldAction}>
+          <input type="hidden" name="packageId" value={packageId} /><input type="hidden" name="itemId" value={itemId} />
+          <button className={`${s.btn} ${s.ghost}`} type="submit" data-testid="clear-agent-hold">Clear agent hold (item no longer held unless QA/human hold remains)</button>
+        </form>
+        <form action={confirmAgentHoldAction}>
+          <input type="hidden" name="packageId" value={packageId} /><input type="hidden" name="itemId" value={itemId} />
+          <button className={s.btn} type="submit" data-testid="confirm-agent-hold">Confirm as human hold (keep it held under HUMAN provenance)</button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function NodeInspector({ node, packageId, editable, items, flags }: { node: GNode; packageId: string; editable: boolean; items: PkgItem[]; flags: Flag[] }) {
   const p = node.payload as { slug?: string; aliases?: { alias: string }[]; shortDescription?: string; externalIds?: { scheme: string; value: string }[] };
   const claims = items.filter((i) => i.section === 'claim' && (i.payload as { subjectRef?: string }).subjectRef === node.localRef);
@@ -337,6 +360,7 @@ function NodeInspector({ node, packageId, editable, items, flags }: { node: GNod
               <button className={`${s.btn} ${s.ghost}`} type="submit" data-testid="save-node-date">Save year</button>
             </form>
           ))}
+          {node.agentHeld && <AgentHoldControls packageId={packageId} itemId={node.itemId} />}
           <MatchEditor node={node} packageId={packageId} />
           <form action={holdItemAction} style={{ marginTop: '0.35rem' }}>
             <input type="hidden" name="packageId" value={packageId} /><input type="hidden" name="itemId" value={node.itemId} /><input type="hidden" name="held" value={(!node.humanHeld).toString()} />
@@ -384,6 +408,7 @@ function EdgeInspector({ edge, packageId, editable, vocabulary, items, flags, so
             <select name="targetRef" defaultValue={edge.target} data-testid="edit-edge-target" style={{ fontSize: '0.74rem' }}>{entityRefs.map((r) => <option key={r} value={r}>{r}</option>)}</select>
             <button className={`${s.btn} ${s.ghost}`} type="submit" data-testid="save-endpoints">Change endpoints</button>
           </form>
+          {edge.agentHeld && <AgentHoldControls packageId={packageId} itemId={edge.itemId} />}
           <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.35rem' }}>
             <form action={holdItemAction}><input type="hidden" name="packageId" value={packageId} /><input type="hidden" name="itemId" value={edge.itemId} /><input type="hidden" name="held" value={(!edge.humanHeld).toString()} />
               <button className={`${s.btn} ${s.ghost}`} type="submit" data-testid="hold-edge">{edge.humanHeld ? 'Remove human hold' : 'Human hold'} edge</button></form>
