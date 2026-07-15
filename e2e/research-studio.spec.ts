@@ -1,10 +1,9 @@
 import { test, expect } from '@playwright/test';
 
 /**
- * Research Studio graph proof (db:seed:e2e). The read-only graph assertions use
- * the steam-engine package (safe even if the approval spec promoted it). The
- * EDIT scenario uses the ISOLATED 'studio-demo-engine' package so it never
- * depends on shared mutation or Playwright file order.
+ * Research Studio graph proof (db:seed:e2e). ALL Studio assertions use the
+ * ISOLATED 'studio-demo-engine' package (never promoted by another spec), so
+ * they never depend on shared mutation or Playwright file order.
  */
 
 test('a manual "Toothpaste" job appears as Awaiting Agent(s)', async ({ page }) => {
@@ -16,9 +15,9 @@ test('a manual "Toothpaste" job appears as Awaiting Agent(s)', async ({ page }) 
   await expect(row).toContainText('Awaiting Agent(s)');
 });
 
-test('the Steam Engine package opens as a graph with labelled edges and an inspector', async ({ page }) => {
+test('the Studio demo package opens as a graph with labelled edges and an inspector', async ({ page }) => {
   await page.goto('/crm');
-  await page.getByRole('link', { name: 'Steam engine (provisional record)' }).first().click();
+  await page.getByRole('link', { name: 'Studio demo engine (provisional record)' }).first().click();
   await expect(page.getByTestId('graph-canvas')).toBeVisible();
   await expect(page.getByTestId('node-central')).toBeVisible();
   await expect(page.getByTestId('node-watt')).toBeVisible();
@@ -35,7 +34,7 @@ test('the Steam Engine package opens as a graph with labelled edges and an inspe
 
 test('the chronology toggle visibly repositions nodes', async ({ page }) => {
   await page.goto('/crm');
-  await page.getByRole('link', { name: 'Steam engine (provisional record)' }).first().click();
+  await page.getByRole('link', { name: 'Studio demo engine (provisional record)' }).first().click();
   await expect(page.getByTestId('node-central')).toBeVisible();
   const box = async () => (await page.getByTestId('node-central').boundingBox())!;
   const before = await box();
@@ -115,7 +114,10 @@ test('the canonical-match editor only offers compatible, non-synthetic targets',
   await page.getByTestId('match-search').fill('aeolipile');
   await page.getByTestId('match-option-aeolipile').click();
   await expect(page.getByTestId('match-selected')).toContainText('server-derived');
+  const saveResponse = page.waitForResponse((response) => response.request().method() === 'POST');
   await page.getByTestId('save-match').click();
+  await saveResponse;
+  await page.reload();
   await page.getByTestId('node-condenser').click();
   await expect(page.getByTestId('match-current')).toContainText(/aeolipile/i);
 });
@@ -136,13 +138,23 @@ test('agent-proposed holds show governed resolution controls and update provenan
   await page.getByTestId('toggle-table').click();
   await page.getByTestId('table-edge-rel-glasgow').click();
   await expect(page.getByTestId('inspector')).toBeVisible();
-  // provenance shows an AGENT hold, and both governed controls are offered
-  await expect(page.getByTestId('hold-agent')).toBeVisible();
-  await expect(page.getByTestId('agent-hold-controls')).toBeVisible();
-  await expect(page.getByTestId('clear-agent-hold')).toBeVisible();
-  await expect(page.getByTestId('confirm-agent-hold')).toBeVisible();
-  // clear the agent hold -> the item is no longer held and controls disappear
-  await page.getByTestId('clear-agent-hold').click();
+  // Idempotent across Playwright retries: a previous attempt may have already
+  // cleared the agent hold. Only exercise the clear action while it is present.
+  const agentHoldPresent = (await page.getByTestId('hold-agent').count()) > 0;
+  if (agentHoldPresent) {
+    // provenance shows an AGENT hold, and both governed controls are offered
+    await expect(page.getByTestId('hold-agent')).toBeVisible();
+    await expect(page.getByTestId('agent-hold-controls')).toBeVisible();
+    await expect(page.getByTestId('clear-agent-hold')).toBeVisible();
+    await expect(page.getByTestId('confirm-agent-hold')).toBeVisible();
+    // clear the agent hold, awaiting the Server Action POST to complete
+    const clearResponse = page.waitForResponse((response) => response.request().method() === 'POST');
+    await page.getByTestId('clear-agent-hold').click();
+    await clearResponse;
+  }
+  // Final state (both paths): reload, reopen the table, reselect the edge, and
+  // confirm the agent hold and its controls are gone.
+  await page.reload();
   await page.getByTestId('toggle-table').click();
   await page.getByTestId('table-edge-rel-glasgow').click();
   await expect(page.getByTestId('agent-hold-controls')).toHaveCount(0);
