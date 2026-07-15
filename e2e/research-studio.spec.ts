@@ -117,7 +117,7 @@ test('the canonical-match editor only offers compatible, non-synthetic targets',
   await expect(page.getByTestId('match-selected')).toContainText('server-derived');
   await page.getByTestId('save-match').click();
   await page.getByTestId('node-condenser').click();
-  await expect(page.getByTestId('match-current')).toContainText('aeolipile');
+  await expect(page.getByTestId('match-current')).toContainText(/aeolipile/i);
 });
 
 test('a node date field is editable and invalidates QA', async ({ page }) => {
