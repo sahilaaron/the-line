@@ -120,8 +120,9 @@ describe('4. generation-safe leases', () => {
     const run = await createRun(db, { batchLimit: 5 });
     await createJob(db, { centralTitle: 'A', origin: 'manual', dedupeKey: 'a', status: 'queued' });
     const c1 = await claimNextJob(db, run.id, { worker: 'w1' });
-    await expire(db, c1.job!.id);
-    await heartbeatJob(db, c1.job!.id, 'w1', c1.job!.workerLock!); // renew
+    // Renew the LIVE lease (an expired lease can no longer be heartbeated).
+    await heartbeatJob(db, c1.job!.id, 'w1', c1.job!.workerLock!);
+    // A sweep must not recover a live (renewed) lease.
     expect(await recoverExpiredLeases(db)).toBe(0);
     expect((await jobOf(db, c1.job!.id)).status).not.toBe('queued');
     expect((await runOf(db, run.id)).claimedCount).toBe(1);
