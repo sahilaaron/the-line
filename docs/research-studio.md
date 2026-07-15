@@ -139,13 +139,13 @@ dashboards.
 
 ## Correction-pass semantics (holds, atomic edits, queue leasing, counters)
 
-### Human holds vs QA-derived holds
+### Hold provenance (superseded model — see v3/v4 below)
 
-Every held item carries `hold_source`: `human` or `qa`. A human hold (set from
-the inspector) persists until a human removes it. A QA flag places a `qa` hold.
-When QA reruns, obsolete QA-derived holds (items no longer flagged by the latest
-QA result) are cleared automatically; a human hold is NEVER cleared by a QA
-rerun. `approve_with_holds` excludes any held item regardless of source.
+> This subsection previously described a single `hold_source` column. That model
+> was replaced in v3 (independent human/QA booleans) and extended in v4 (a third
+> agent-proposed source). The authoritative description is
+> "Independent hold sources" under the v4 section. The stale `hold_source`
+> description has been removed.
 
 ### Atomic edits + revisions
 
@@ -274,3 +274,87 @@ functional canonical-match editor; independent human-hold toggle. Edge inspector
 sources/citations, dates, accurate human/QA hold provenance, type/endpoint edits.
 A neighbourhood focus control collapses the graph to a selected node and its
 direct neighbours. The accessible table rows select the node/edge they describe.
+
+## Correction pass v4 (2026-07-15)
+
+### Independent hold sources (authoritative)
+
+A candidate item carries THREE independent hold booleans, and the effective
+`held` column equals their OR, enforced by a CHECK
+(`research_package_items_held_consistent`):
+
+- `human_held` — a reviewer hold set from the inspector; cleared only by a human.
+- `qa_held` — raised by a non-pass QA flag on the item; a passing QA rerun clears
+  only obsolete `qa_held`, never a human or agent hold.
+- `agent_held` — a hold PROPOSED by the research agent in the submitted envelope
+  (`held: true` on a relationship/claim/media). It is neither a QA finding nor a
+  human decision, so it is stored with its own honest provenance rather than
+  being mislabelled as QA/human.
+
+Migration `0007` introduced `human_held`/`qa_held` (backfilling the old
+`hold_source`), and `0008` added `agent_held` and widened the CHECK. Removing one
+source never clears another; `approve_with_holds` and promotion exclude any item
+whose effective `held` is true. A migration-upgrade test proves legacy
+`hold_source` rows remain coherent through `0007`+`0008`.
+
+### Submission ownership + lease requirement
+
+`submitPackage` only creates a package for a job that is `claimed`/`researching`
+with a LIVE lease, and the submitter must be the exact owning worker
+(`claimed_by_worker`). A queued/returned/failed/cancelled/completed job, an
+expired lease, or a non-owner is rejected. Identical re-submission by the owner
+is idempotent. The CoWork prompt and CLI pass the same `--worker <your-name>`
+used for claim/begin/heartbeat. Trusted internal callers (seed/demo) use an
+explicit `{ trusted: true }` path; the production service is never weakened for
+fixtures.
+
+### One job → one package
+
+A job may have at most ONE package (a correction is a NEW job). This is enforced
+in the service (a different-content second submission is rejected) AND at the
+database level by `UNIQUE(research_packages.job_id)`.
+
+### Expired-lease recovery at batchLimit = 1
+
+The capacity check runs AFTER selection: a run at its batch limit may reclaim its
+OWN expired in-flight job (net-zero — that job already holds a slot) but may not
+consume a new slot for a different queued job or a discovery seed. A cross-run
+reclaim transfers the slot (old run −1, new run +1). Terminal lease operations
+(release/fail) and submission use guarded conditional updates so two concurrent
+calls cannot double-decrement `claimed_count`, double-increment `failed_count`,
+or create two packages.
+
+### Canonical-match compatibility rules
+
+`correctCanonicalMatch` (and the picker search) enforce, server-side:
+
+- the target must be a real, NON-synthetic canonical entity (rejected even if a
+  client forges the id);
+- kind compatibility — same kind, or the artefact family
+  (`invention`/`technology`/`product`); person/event/organisation/place/etc.
+  never cross;
+- the match status is DERIVED from the target's completeness
+  (`canonical_complete` vs `canonical_incomplete`), not freely selected; a
+  supplied status that disagrees is rejected;
+- clearing requires a no-entity status, so a status can never silently clear a
+  real match.
+
+The picker searches valid targets server-side (`searchCanonicalMatchTargets`):
+non-synthetic, kind-filtered, bounded page size — no silent "latest 300 rows"
+cap.
+
+### Generic edit allowlist
+
+`editPackageItemFields` accepts only an explicit per-section field allowlist.
+Governed structural fields (`typeKey`, `sourceRef`, `targetRef`, canonical-match
+fields, hold fields, `isSynthetic`, `decision`) are rejected and must go through
+their dedicated services (`changeRelationshipType`,
+`changeRelationshipEndpoints`, `correctCanonicalMatch`, `setItemHold`,
+`rejectPackageItem`). Server actions do not trust hidden client form fields.
+
+### CI coverage for the research kernel
+
+`.github/workflows/ci.yml` runs a dedicated "Research kernel tests" step
+(`npx vitest run src/services/research --testTimeout=30000`) so queue leasing,
+submission lifecycle, holds, promotion, editing and canonical matching are all
+exercised in CI. No failure-hiding retries on that step.
