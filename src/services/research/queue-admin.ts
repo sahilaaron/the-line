@@ -3,7 +3,7 @@
  * through repositories/services (no raw SQL in UI/CLI). Atomic claims + lease
  * recovery are preserved so multiple CoWork agents can never hold one job.
  */
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, gt, inArray, sql } from 'drizzle-orm';
 import { researchJobs, researchRuns, type ResearchJob, type ResearchRun } from '../../db/schema';
 import type { Db } from '../../db/repositories/types';
 import { getJob, nextJobSequence } from '../../db/repositories/research';
@@ -71,13 +71,17 @@ async function leaseRejected(exec: Db, jobId: string, op: string): Promise<never
 }
 
 export async function beginJob(db: Db, jobId: string, worker: string, leaseToken: string): Promise<ResearchJob> {
+  const now = new Date();
   const [row] = await db.update(researchJobs)
-    .set({ status: 'researching', leaseExpiresAt: new Date(Date.now() + DEFAULT_QUEUE_CONFIG.leaseMs), updatedAt: new Date() })
+    .set({ status: 'researching', leaseExpiresAt: new Date(now.getTime() + DEFAULT_QUEUE_CONFIG.leaseMs), updatedAt: now })
     .where(and(
       eq(researchJobs.id, jobId),
       eq(researchJobs.status, 'claimed'),
       eq(researchJobs.claimedByWorker, worker),
       eq(researchJobs.workerLock, leaseToken),
+      // The lease must still be LIVE: an expired lease is no longer owned even
+      // if not yet reclaimed, so the expired token cannot revive it.
+      gt(researchJobs.leaseExpiresAt, now),
     ))
     .returning();
   if (!row) return leaseRejected(db, jobId, 'begin');
@@ -85,13 +89,16 @@ export async function beginJob(db: Db, jobId: string, worker: string, leaseToken
 }
 
 export async function heartbeatJob(db: Db, jobId: string, worker: string, leaseToken: string): Promise<ResearchJob> {
+  const now = new Date();
   const [row] = await db.update(researchJobs)
-    .set({ leaseExpiresAt: new Date(Date.now() + DEFAULT_QUEUE_CONFIG.leaseMs), updatedAt: new Date() })
+    .set({ leaseExpiresAt: new Date(now.getTime() + DEFAULT_QUEUE_CONFIG.leaseMs), updatedAt: now })
     .where(and(
       eq(researchJobs.id, jobId),
       inArray(researchJobs.status, ['claimed', 'researching']),
       eq(researchJobs.claimedByWorker, worker),
       eq(researchJobs.workerLock, leaseToken),
+      // The lease must still be LIVE: an expired lease cannot be extended.
+      gt(researchJobs.leaseExpiresAt, now),
     ))
     .returning();
   if (!row) return leaseRejected(db, jobId, 'heartbeat');
@@ -106,13 +113,17 @@ export async function releaseJob(db: Db, jobId: string, worker: string, leaseTok
     // release (old token after a reclaim) or a concurrent second release
     // matches 0 rows, so the atomic slot decrement runs EXACTLY once. The run
     // id is captured from the flipped row BEFORE it is cleared.
+    const now = new Date();
     const [row] = await tx.update(researchJobs)
-      .set({ status: 'queued', workerLock: null, claimedByWorker: null, leaseExpiresAt: null, updatedAt: new Date() })
+      .set({ status: 'queued', workerLock: null, claimedByWorker: null, leaseExpiresAt: null, updatedAt: now })
       .where(and(
         eq(researchJobs.id, jobId),
         inArray(researchJobs.status, ['claimed', 'researching']),
         eq(researchJobs.claimedByWorker, worker),
         eq(researchJobs.workerLock, leaseToken),
+        // Live lease only: an expired token cannot release (recoverExpiredLeases
+        // handles expired jobs). A 0-row match here skips the slot decrement.
+        gt(researchJobs.leaseExpiresAt, now),
       ))
       .returning();
     if (!row) return leaseRejected(tx, jobId, 'release');
@@ -136,13 +147,17 @@ export async function failJob(db: Db, jobId: string, reason: string, worker: str
     // call that flips claimed/researching -> failed under this token increments
     // failedCount. A stale fail (old token after a reclaim) or a concurrent
     // second fail matches 0 rows. An already-failed job is an idempotent no-op.
+    const now = new Date();
     const flipped = await tx.update(researchJobs)
-      .set({ status: 'failed', lastError: reason, workerLock: null, claimedByWorker: null, leaseExpiresAt: null, updatedAt: new Date() })
+      .set({ status: 'failed', lastError: reason, workerLock: null, claimedByWorker: null, leaseExpiresAt: null, updatedAt: now })
       .where(and(
         eq(researchJobs.id, jobId),
         inArray(researchJobs.status, ['claimed', 'researching']),
         eq(researchJobs.claimedByWorker, worker),
         eq(researchJobs.workerLock, leaseToken),
+        // Live lease only: an expired token cannot fail (and so cannot increment
+        // failedCount). A 0-row match falls through to the reject path below.
+        gt(researchJobs.leaseExpiresAt, now),
       ))
       .returning({ id: researchJobs.id, runId: researchJobs.claimedByRunId });
     if (flipped.length === 0) {
