@@ -332,4 +332,7 @@ export const packageEditKindEnum = pgEnum('package_edit_kind', [
   'hold',
   'unhold',
   'reject_item',
+  // Cycle 8B v5: governed human resolution of an agent-proposed hold.
+  'clear_agent_hold',
+  'confirm_agent_hold',
 ]);

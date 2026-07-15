@@ -134,6 +134,10 @@ export const researchPackages = pgTable(
     /** Idempotency: repeated submit of identical content is a no-op. */
     submissionHash: text('submission_hash').notNull(),
     submittedBy: text('submitted_by'),
+    /** Cycle 8B v5: the lease-generation token (workerLock) the submission was
+     * made under, so an idempotent replay can be authenticated (same worker AND
+     * same lease identity) rather than trusting caller-supplied content. */
+    submissionLeaseToken: text('submission_lease_token'),
     submittedAt: timestamp('submitted_at', { withTimezone: true }).notNull().defaultNow(),
     promotedEntityId: text('promoted_entity_id').references(() => entities.id, {
       onDelete: 'set null',
