@@ -17,6 +17,7 @@ import { eq } from 'drizzle-orm';
 import { freshMigratedDb } from '../../db/testing/setup';
 import { entities, researchJobs, researchPackageItems, researchRuns, qaResults } from '../../db/schema';
 import { createJob } from '../../db/repositories/research';
+import { createEntity } from '../../db/repositories/entities';
 import { createRun } from './run';
 import { claimNextJob } from './queue';
 import { submitPackage } from './submit';
@@ -33,7 +34,7 @@ const item = async (db: DB, pkgId: string, section: string, ref: string) =>
 async function stageSteam(db: DB, withQa = true) {
   await seedSteamEngineExistingCanon(db);
   const job = await createJob(db, { centralTitle: 'Steam engine', origin: 'manual', dedupeKey: `se-${Math.random()}`, status: 'claimed' });
-  const { package: pkg } = await submitPackage(db, job.id, STEAM_ENGINE_ENVELOPE);
+  const { package: pkg } = await submitPackage(db, job.id, STEAM_ENGINE_ENVELOPE, { trusted: true });
   if (withQa) await recordQa(db, pkg.id, STEAM_ENGINE_QA);
   return pkg;
 }
@@ -152,18 +153,19 @@ describe('G. canonical-match editing requires a valid entity + controlled status
   it('rejects an asserting status with no entity id (and never silently clears a match)', async () => {
     const { db } = await freshMigratedDb();
     const pkg = await stageSteam(db, false);
-    const central = await item(db, pkg.id, 'entity', 'central');
-    const target = (await db.query.entities.findMany())[0];
-    // set a real match first
-    await correctCanonicalMatch(db, central.id, target.id, 'canonical_complete', 'Sahil');
+    const central = await item(db, pkg.id, 'entity', 'central'); // kind: invention
+    // a KIND-COMPATIBLE, non-synthetic target (invention); status is derived.
+    const target = await createEntity(db, { slug: 'match-target-inv', kind: 'invention', label: 'Target Invention', graphStatus: 'canonical_complete' });
+    await correctCanonicalMatch(db, central.id, target.id, null, 'Sahil');
     expect((await item(db, pkg.id, 'entity', 'central')).matchEntityId).toBe(target.id);
+    expect((await item(db, pkg.id, 'entity', 'central')).matchStatus).toBe('canonical_complete'); // derived
     // an asserting status with NO id must be rejected — not silently clear it
     await expect(correctCanonicalMatch(db, central.id, null, 'canonical_complete', 'Sahil')).rejects.toThrow();
     expect((await item(db, pkg.id, 'entity', 'central')).matchEntityId).toBe(target.id); // unchanged
     // arbitrary free-text status is rejected
     await expect(correctCanonicalMatch(db, central.id, target.id, 'totally-made-up', 'Sahil')).rejects.toThrow();
     // a non-existent entity id is rejected
-    await expect(correctCanonicalMatch(db, central.id, 'no-such-id', 'canonical_complete', 'Sahil')).rejects.toThrow();
+    await expect(correctCanonicalMatch(db, central.id, 'no-such-id', 'canonical_incomplete', 'Sahil')).rejects.toThrow();
     // explicit clear with a no-entity status is allowed
     const cleared = await correctCanonicalMatch(db, central.id, null, 'no_match', 'Sahil');
     expect(cleared.item.matchEntityId).toBeNull();

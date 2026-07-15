@@ -100,19 +100,24 @@ test('synthetic candidates require explicit developer mode', async ({ page }) =>
   await expect(page.getByTestId('node-synthnode')).toBeVisible();
 });
 
-test('the canonical-match editor selects a real entity with a controlled status', async ({ page }) => {
+test('the canonical-match editor only offers compatible, non-synthetic targets', async ({ page }) => {
   await page.goto('/crm');
   await page.getByRole('link', { name: 'Studio demo engine (provisional record)' }).first().click();
-  await page.getByTestId('node-condenser').click(); // a new candidate (no match)
+  await page.getByTestId('node-condenser').click(); // an INVENTION candidate (no match)
   await expect(page.getByTestId('match-editor')).toBeVisible();
-  // search narrows the canonical entity picker, then pick a real entity + status
+  // an invention candidate must NOT be able to match a PERSON (kind-incompatible)
   await page.getByTestId('match-search').fill('watt');
-  await page.getByTestId('match-entity-select').selectOption({ index: 1 }); // first canonical match after the search filter
-  await page.getByTestId('match-status-select').selectOption('canonical_incomplete');
+  await expect(page.getByTestId('match-option-james-watt')).toHaveCount(0);
+  // a synthetic entity is never offered
+  await page.getByTestId('match-search').fill('synthetic');
+  await expect(page.getByTestId('match-results')).not.toContainText('SYNTHETIC');
+  // a kind-COMPATIBLE canonical invention (aeolipile) IS offered and matchable
+  await page.getByTestId('match-search').fill('aeolipile');
+  await page.getByTestId('match-option-aeolipile').click();
+  await expect(page.getByTestId('match-selected')).toContainText('server-derived');
   await page.getByTestId('save-match').click();
-  // the inspector reflects the real match with a link to the canonical record
   await page.getByTestId('node-condenser').click();
-  await expect(page.getByTestId('match-current')).toContainText('James Watt');
+  await expect(page.getByTestId('match-current')).toContainText('aeolipile');
 });
 
 test('a node date field is editable and invalidates QA', async ({ page }) => {

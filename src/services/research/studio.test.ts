@@ -19,7 +19,7 @@ import {
 async function stageSteamEngine(db: Awaited<ReturnType<typeof freshMigratedDb>>['db'], withQa = true) {
   await seedSteamEngineExistingCanon(db);
   const job = await createJob(db, { centralTitle: 'Steam engine', origin: 'manual', dedupeKey: `se-${Math.random()}`, status: 'claimed' });
-  const { package: pkg } = await submitPackage(db, job.id, STEAM_ENGINE_ENVELOPE);
+  const { package: pkg } = await submitPackage(db, job.id, STEAM_ENGINE_ENVELOPE, { trusted: true });
   if (withQa) await recordQa(db, pkg.id, STEAM_ENGINE_QA);
   return pkg;
 }

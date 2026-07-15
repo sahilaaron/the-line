@@ -24,7 +24,7 @@ const jobOf = async (db: DB, id: string) => (await db.query.researchJobs.findFir
 async function stageSteam(db: DB, withQa = true) {
   await seedSteamEngineExistingCanon(db);
   const job = await createJob(db, { centralTitle: 'Steam engine', origin: 'manual', dedupeKey: `se-${Math.random()}`, status: 'claimed' });
-  const { package: pkg } = await submitPackage(db, job.id, STEAM_ENGINE_ENVELOPE);
+  const { package: pkg } = await submitPackage(db, job.id, STEAM_ENGINE_ENVELOPE, { trusted: true });
   if (withQa) await recordQa(db, pkg.id, STEAM_ENGINE_QA);
   return pkg;
 }
@@ -139,7 +139,7 @@ describe('6. classification preserves canonical kind', () => {
         entities: [{ ref: 'central', role: 'central' as const, slug, label: `${cls} subject`, classifications: [cls] }],
       };
       const job = await createJob(db, { centralTitle: cls, origin: 'manual', dedupeKey: cls, status: 'claimed' });
-      const { package: pkg } = await submitPackage(db, job.id, env);
+      const { package: pkg } = await submitPackage(db, job.id, env, { trusted: true });
       await decidePackage(db, pkg.id, { decision: 'approve' });
       const ent = (await db.select().from(entities)).find((e) => e.slug === slug)!;
       expect(ent.kind).toBe(cls);

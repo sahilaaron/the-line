@@ -141,8 +141,8 @@ describe('submit idempotency + promotion rollback (DB)', () => {
   it('re-submitting identical content is idempotent (no duplicate package)', async () => {
     const { db } = await freshMigratedDb();
     const job = await createJob(db, { centralTitle: 'Thing', origin: 'manual', dedupeKey: 'thing', status: 'claimed' });
-    const first = await submitPackage(db, job.id, minimalEnvelope('thing'));
-    const second = await submitPackage(db, job.id, minimalEnvelope('thing'));
+    const first = await submitPackage(db, job.id, minimalEnvelope('thing'), { trusted: true });
+    const second = await submitPackage(db, job.id, minimalEnvelope('thing'), { trusted: true });
     expect(first.created).toBe(true);
     expect(second.created).toBe(false);
     expect(second.package.id).toBe(first.package.id);
@@ -162,7 +162,7 @@ describe('submit idempotency + promotion rollback (DB)', () => {
         { ref: 'amb', role: 'connected' as const, slug: 'ambiguous-new', label: 'Clash Name', kind: 'concept' as const, classifications: ['concept'] },
       ],
     };
-    const { package: pkg } = await submitPackage(db, job.id, envelope);
+    const { package: pkg } = await submitPackage(db, job.id, envelope, { trusted: true });
     await expect(decidePackage(db, pkg.id, { decision: 'approve' })).rejects.toThrow(/ambiguous/i);
     // nothing partially promoted: root-node was NOT created
     expect((await db.query.entities.findMany()).length).toBe(before);

@@ -26,7 +26,7 @@ const envelope = (over: Env = {}): Env => ({ schemaVersion: 1, entities: [centra
 
 async function stage(db: Awaited<ReturnType<typeof freshMigratedDb>>['db'], env: Env, dedupe = Math.random().toString(36).slice(2)) {
   const job = await createJob(db, { centralTitle: 'X', origin: 'manual', dedupeKey: dedupe, status: 'claimed' });
-  const { package: pkg } = await submitPackage(db, job.id, env);
+  const { package: pkg } = await submitPackage(db, job.id, env, { trusted: true });
   return { job, pkg };
 }
 
