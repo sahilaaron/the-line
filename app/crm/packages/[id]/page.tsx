@@ -1,7 +1,5 @@
 import Link from 'next/link';
 import { getDevDb } from '@/src/db/client/dev';
-import { entities } from '@/src/db/schema';
-import { desc } from 'drizzle-orm';
 import { getPackageDetail } from '@/src/db/queries/crm';
 import { projectPackageGraph } from '@/src/services/research/graph-projection';
 import { getRelationshipVocabulary } from '@/src/services/research/vocabulary';
@@ -30,9 +28,8 @@ export default async function PackageReview({ params, searchParams }: { params: 
   const { package: pkg, sections, decisions } = detail;
   const graph = await projectPackageGraph(db, id, { includeSynthetic: devMode });
   const vocabulary = await getRelationshipVocabulary(db);
-  // Canonical entities offered in the match picker (real ids only).
-  const canonicalEntities = (await db.select({ id: entities.id, label: entities.label, slug: entities.slug, kind: entities.kind })
-    .from(entities).orderBy(desc(entities.updatedAt)).limit(300));
+  // The canonical match picker searches server-side on demand (non-synthetic,
+  // kind-compatible, scalable) — no bulk row preload here.
   const qaInvalidated = await qaIsStale(db, id);
   const revisions = await listPackageRevisions(db, id);
   const decided = ['approved', 'approved_with_holds', 'returned', 'marked_duplicate', 'rejected', 'promoted'].includes(pkg.status);
@@ -55,7 +52,7 @@ export default async function PackageReview({ params, searchParams }: { params: 
       </p>
 
       {graph ? (
-        <PackageStudio graph={graph as never} items={allItems} vocabulary={vocabulary as never} canonicalEntities={canonicalEntities} devMode={devMode} packageId={id} packageStatus={pkg.status} qaInvalidated={qaInvalidated} />
+        <PackageStudio graph={graph as never} items={allItems} vocabulary={vocabulary as never} devMode={devMode} packageId={id} packageStatus={pkg.status} qaInvalidated={qaInvalidated} />
       ) : (
         <p className={s.sub}>No graph could be projected for this package.</p>
       )}

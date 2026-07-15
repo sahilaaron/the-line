@@ -76,6 +76,8 @@ import {
   setItemHold,
   rejectPackageItem,
   correctCanonicalMatch,
+  searchCanonicalMatchTargets,
+  type MatchTarget,
 } from '@/src/services/research/edit';
 
 const REVALIDATE = (pkgId: string) => {
@@ -147,6 +149,14 @@ export async function correctMatchAction(formData: FormData) {
   const matchStatus = (formData.get('matchStatus') as string) || null;
   if (itemId) await correctCanonicalMatch(db, itemId, matchEntityId, matchStatus, 'Sahil');
   REVALIDATE(pkgId);
+}
+
+/** Server-side canonical match-target search (scales; excludes synthetic;
+ * kind-filtered). Returned to the client picker; the server remains the final
+ * authority in correctCanonicalMatch. */
+export async function searchMatchTargetsAction(term: string, candidateKind: string): Promise<MatchTarget[]> {
+  const db = getDevDb();
+  return searchCanonicalMatchTargets(db, { term, candidateKind, limit: 25 });
 }
 
 /* ---- Cycle 8B: honest queue management actions ---- */
