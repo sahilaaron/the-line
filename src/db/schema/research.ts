@@ -148,6 +148,8 @@ export const researchPackages = pgTable(
     index('research_packages_job_idx').on(t.jobId),
     index('research_packages_status_idx').on(t.status),
     unique('research_packages_job_hash_unique').on(t.jobId, t.submissionHash),
+    // Cycle 8B v4: at most ONE package per job (a correction is a NEW job).
+    unique('research_packages_job_unique').on(t.jobId),
     check('research_packages_slug_not_empty', sql`length(${t.centralSlug}) > 0`),
   ],
 );
@@ -178,6 +180,10 @@ export const researchPackageItems = pgTable(
      * QA rerun clears qaHeld only; a human unhold clears humanHeld only. */
     humanHeld: boolean('human_held').notNull().default(false),
     qaHeld: boolean('qa_held').notNull().default(false),
+    /** Cycle 8B v4: a hold PROPOSED by the research agent in the submitted
+     * envelope (before QA/human review). Distinct provenance — it is neither a
+     * QA finding nor a human review decision, so it is never fabricated as one. */
+    agentHeld: boolean('agent_held').notNull().default(false),
     decision: researchItemDecisionEnum('decision').notNull().default('pending'),
     decidedAt: timestamp('decided_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -187,7 +193,7 @@ export const researchPackageItems = pgTable(
     index('research_package_items_section_idx').on(t.packageId, t.section),
     unique('research_package_items_ref_unique').on(t.packageId, t.section, t.localRef),
     // held must always equal (humanHeld OR qaHeld): no invalid hold state.
-    check('research_package_items_held_consistent', sql`${t.held} = (${t.humanHeld} OR ${t.qaHeld})`),
+    check('research_package_items_held_consistent', sql`${t.held} = (${t.humanHeld} OR ${t.qaHeld} OR ${t.agentHeld})`),
   ],
 );
 
