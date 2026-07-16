@@ -72,6 +72,14 @@ jobs:
             npm run db:test
           fi
 
+      # The research kernel (queue leasing, submission lifecycle, holds,
+      # promotion, candidate editing, canonical matching) lives in
+      # src/services/research and was previously NOT run in CI. Run it as its
+      # own clearly-named step. No retry — these tests are deterministic; a
+      # failure here must fail the job.
+      - name: Research kernel tests
+        run: npx vitest run src/services/research --testTimeout=30000
+
       - name: Production build
         run: npm run build
 
@@ -103,7 +111,6 @@ jobs:
         run: npm run db:migrate && npm run db:seed:e2e
         env:
           PGLITE_DATA_DIR: ${{ runner.temp }}/pglite
-
       - name: Production build
         run: npm run build
 

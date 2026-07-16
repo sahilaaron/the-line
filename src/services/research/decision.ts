@@ -36,6 +36,7 @@ import { humanDecisionSchema, type HumanDecisionInput, type HeldItem } from '../
 import { assertTransition, PACKAGE_TRANSITIONS } from './state-machine';
 import { promoteWithinTx, type PromotionResult } from './promotion';
 import { recordJobOutcome } from './run';
+import { qaIsStale } from './edit';
 
 export interface DecisionResult {
   decision: PackageDecision;
@@ -136,6 +137,12 @@ export async function decidePackage(
 
     const items = (await tx.query.researchPackageItems.findMany()).filter((i) => i.packageId === packageId);
 
+    // Cycle 8B: approval is blocked if a prior QA result is stale relative to
+    // candidate edits — QA must be rerun after material edits.
+    if ((input.decision === 'approve' || input.decision === 'approve_with_holds') && (await qaIsStale(tx, packageId))) {
+      throw new Error(`package ${packageId} was edited after QA; re-run QA before approval (status is qa_pending)`);
+    }
+
     // Every held identity must name a real item in THIS package (duplicates and
     // malformed identities are already rejected by the validator).
     if (input.decision === 'approve_with_holds') {
@@ -169,10 +176,13 @@ export async function decidePackage(
 
     let next: string = 'in_review';
     if (input.decision === 'approve') {
-      for (const it of items) await setItem(it.id, 'accepted');
+      // Package approval resolves PENDING candidates but must NEVER reverse an
+      // explicit item-level rejection.
+      for (const it of items) if (it.decision !== 'rejected') await setItem(it.id, 'accepted');
       next = 'approved';
     } else if (input.decision === 'approve_with_holds') {
       for (const it of items) {
+        if (it.decision === 'rejected') continue; // never un-reject an explicit rejection
         const excluded = heldSet.has(heldKey({ section: it.section, localRef: it.localRef })) || it.held;
         await setItem(it.id, excluded ? 'held' : 'accepted');
       }

@@ -43,7 +43,7 @@ async function runFullWorkflow() {
   });
   const claim = await claimNextJob(db, run.id, { worker: 'cowork' });
   expect(claim.job).toBeTruthy();
-  const { package: pkg } = await submitPackage(db, claim.job!.id, STEAM_ENGINE_ENVELOPE);
+  const { package: pkg } = await submitPackage(db, claim.job!.id, STEAM_ENGINE_ENVELOPE, { worker: 'cowork', leaseToken: claim.job!.workerLock! });
   await recordQa(db, pkg.id, STEAM_ENGINE_QA);
   const decision = await decidePackage(db, pkg.id, STEAM_ENGINE_DECISION);
   return { db, run, pkg, decision, seeded };

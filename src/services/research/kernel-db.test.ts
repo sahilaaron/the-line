@@ -3,6 +3,7 @@
 import { describe, it, expect } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { freshMigratedDb } from '../../db/testing/setup';
+import { stageClaimedJob } from './fixtures/staging';
 import { researchJobs } from '../../db/schema';
 import { createEntity } from '../../db/repositories/entities';
 import { createClaim } from '../../db/repositories/claims';
@@ -140,9 +141,9 @@ describe('submit idempotency + promotion rollback (DB)', () => {
 
   it('re-submitting identical content is idempotent (no duplicate package)', async () => {
     const { db } = await freshMigratedDb();
-    const job = await createJob(db, { centralTitle: 'Thing', origin: 'manual', dedupeKey: 'thing', status: 'claimed' });
-    const first = await submitPackage(db, job.id, minimalEnvelope('thing'));
-    const second = await submitPackage(db, job.id, minimalEnvelope('thing'));
+    const { job, worker, leaseToken } = await stageClaimedJob(db, { title: 'Thing' });
+    const first = await submitPackage(db, job.id, minimalEnvelope('thing'), { worker, leaseToken });
+    const second = await submitPackage(db, job.id, minimalEnvelope('thing'), { worker, leaseToken });
     expect(first.created).toBe(true);
     expect(second.created).toBe(false);
     expect(second.package.id).toBe(first.package.id);
@@ -154,7 +155,7 @@ describe('submit idempotency + promotion rollback (DB)', () => {
     await createEntity(db, { slug: 'clash-1', kind: 'concept', label: 'Clash Name' });
     await createEntity(db, { slug: 'clash-2', kind: 'concept', label: 'Clash Name' });
     const before = (await db.query.entities.findMany()).length;
-    const job = await createJob(db, { centralTitle: 'Root', origin: 'manual', dedupeKey: 'root', status: 'claimed' });
+    const staged = await stageClaimedJob(db, { title: 'Root' });
     const envelope = {
       schemaVersion: 1 as const,
       entities: [
@@ -162,7 +163,7 @@ describe('submit idempotency + promotion rollback (DB)', () => {
         { ref: 'amb', role: 'connected' as const, slug: 'ambiguous-new', label: 'Clash Name', kind: 'concept' as const, classifications: ['concept'] },
       ],
     };
-    const { package: pkg } = await submitPackage(db, job.id, envelope);
+    const { package: pkg } = await submitPackage(db, staged.job.id, envelope, { worker: staged.worker, leaseToken: staged.leaseToken });
     await expect(decidePackage(db, pkg.id, { decision: 'approve' })).rejects.toThrow(/ambiguous/i);
     // nothing partially promoted: root-node was NOT created
     expect((await db.query.entities.findMany()).length).toBe(before);

@@ -11,7 +11,32 @@ export const entityKindValues = [
   'civilisation',
   'concept',
   'period',
+  'discovery',
+  'technology',
+  'movement',
+  'publication',
+  'product',
+  'law_policy',
 ] as const;
+
+/** Display labels for entity kinds (UI only — never changes the enum value). */
+export const ENTITY_KIND_LABELS: Record<(typeof entityKindValues)[number], string> = {
+  person: 'Person',
+  invention: 'Invention',
+  event: 'Event',
+  theme: 'Theme',
+  place: 'Place',
+  organisation: 'Organization',
+  civilisation: 'Civilisation',
+  concept: 'Concept',
+  period: 'Period',
+  discovery: 'Discovery',
+  technology: 'Technology',
+  movement: 'Movement',
+  publication: 'Publication',
+  product: 'Product',
+  law_policy: 'Law / Policy',
+};
 
 export const editorialStatusValues = [
   'draft',

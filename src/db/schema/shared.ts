@@ -61,6 +61,13 @@ export const entityKindEnum = pgEnum('entity_kind', [
   'civilisation',
   'concept',
   'period',
+  // Cycle 8B vocabulary v1 additions (forward-only; existing values kept).
+  'discovery',
+  'technology',
+  'movement',
+  'publication',
+  'product',
+  'law_policy',
 ]);
 
 export const relationshipTypeEnum = pgEnum('relationship_type', [
@@ -315,3 +322,17 @@ export const ENTITY_RESOLUTION_STATUSES = [
   'superseded_or_archived',
 ] as const;
 export type EntityResolutionStatus = (typeof ENTITY_RESOLUTION_STATUSES)[number];
+
+/** Cycle 8B — kind of an auditable candidate edit (revision history). */
+export const packageEditKindEnum = pgEnum('package_edit_kind', [
+  'field_edit',
+  'relationship_type',
+  'relationship_endpoints',
+  'canonical_match',
+  'hold',
+  'unhold',
+  'reject_item',
+  // Cycle 8B v5: governed human resolution of an agent-proposed hold.
+  'clear_agent_hold',
+  'confirm_agent_hold',
+]);

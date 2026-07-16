@@ -1081,3 +1081,29 @@ refinements:
 
 New/updated tests: `corrections.test.ts` (21) + held-rule pure tests; Steam
 Engine proof and all prior suites remain green.
+
+### Cycle 8B — Research Studio (Opus, from main@7858cda)
+
+Graph-native operator experience on top of the 8A kernel. Migrations 0004
+(vocabulary v1: +6 entity kinds forward-only, +25 relationship registry types,
+`is_provisional`) and 0005 (`research_package_item_revisions`, `last_edited_at`).
+
+- **Graph review** (React Flow / `@xyflow/react` v12 — proven, maintainable,
+  focused footprint): `graph-projection.ts` projects a package into typed
+  nodes/edges with machine-readable states + forward/inverse labels +
+  deterministic layout; `PackageStudio.tsx` is the default `/crm/packages/[id]`
+  surface (canvas + inspector + filters + chronology toggle + accessible table
+  fallback).
+- **Candidate editing** (`edit.ts`): validated edits with append-only revision
+  history; material edits invalidate QA (`qaIsStale` gate blocks approval until
+  re-QA); hold/reject are non-material.
+- **Vocabulary** (`vocabulary.ts`, `seed/relationship-vocabulary.ts`): registry-
+  authoritative v1; endpoint-kind validation; read-only `/crm/vocabulary`.
+- **Honest queue** (`display-state.ts`, `queue-admin.ts`, `prompts.ts`): derived
+  `Awaiting Agent(s)`, active-agent count from leases, priority/cancel/requeue,
+  begin/heartbeat/release/fail, claim-next-active (safe on ambiguity), copy
+  prompts. CLI extended.
+- **Dashboard**: wide operational layout, private/not-published language,
+  synthetic hidden by default.
+- Tests: vocabulary (6), studio projection+edit+QA (8), queue-ops (14 across two
+  files → 8 here), plus a CI-ready Playwright studio spec.

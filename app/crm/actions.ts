@@ -67,3 +67,146 @@ export async function decisionAction(formData: FormData) {
   revalidatePath(`/crm/packages/${packageId}`);
   redirect(`/crm/packages/${packageId}`);
 }
+
+/* ---- Cycle 8B: Research Studio candidate-edit actions ---- */
+import {
+  editPackageItemFields,
+  changeRelationshipType,
+  changeRelationshipEndpoints,
+  setItemHold,
+  rejectPackageItem,
+  correctCanonicalMatch,
+  searchCanonicalMatchTargets,
+  clearAgentHold,
+  confirmAgentHoldAsHuman,
+  type MatchTarget,
+} from '@/src/services/research/edit';
+
+const REVALIDATE = (pkgId: string) => {
+  revalidatePath(`/crm/packages/${pkgId}`);
+  revalidatePath('/crm');
+};
+
+// Fields whose value is numeric in the package contract (dates, weights) — the
+// form submits strings, so coerce before validation.
+const NUMERIC_FIELDS = new Set(['startYear', 'endYear', 'confidence', 'strength']);
+
+export async function editItemFieldsAction(formData: FormData) {
+  const db = getDevDb();
+  const pkgId = String(formData.get('packageId') ?? '');
+  const itemId = String(formData.get('itemId') ?? '');
+  const field = String(formData.get('field') ?? '');
+  const raw = String(formData.get('value') ?? '');
+  if (itemId && field) {
+    const value: unknown = NUMERIC_FIELDS.has(field) ? Number(raw) : raw;
+    await editPackageItemFields(db, itemId, { [field]: value }, 'Sahil');
+  }
+  REVALIDATE(pkgId);
+}
+
+export async function changeRelTypeAction(formData: FormData) {
+  const db = getDevDb();
+  const pkgId = String(formData.get('packageId') ?? '');
+  const itemId = String(formData.get('itemId') ?? '');
+  const typeKey = String(formData.get('typeKey') ?? '');
+  if (itemId && typeKey) await changeRelationshipType(db, itemId, typeKey, 'Sahil');
+  REVALIDATE(pkgId);
+}
+
+export async function changeRelEndpointsAction(formData: FormData) {
+  const db = getDevDb();
+  const pkgId = String(formData.get('packageId') ?? '');
+  const itemId = String(formData.get('itemId') ?? '');
+  const sourceRef = String(formData.get('sourceRef') ?? '');
+  const targetRef = String(formData.get('targetRef') ?? '');
+  if (itemId && sourceRef && targetRef) await changeRelationshipEndpoints(db, itemId, sourceRef, targetRef, 'Sahil');
+  REVALIDATE(pkgId);
+}
+
+export async function holdItemAction(formData: FormData) {
+  const db = getDevDb();
+  const pkgId = String(formData.get('packageId') ?? '');
+  const itemId = String(formData.get('itemId') ?? '');
+  const held = String(formData.get('held') ?? 'true') === 'true';
+  if (itemId) await setItemHold(db, itemId, held, 'Sahil');
+  REVALIDATE(pkgId);
+}
+
+export async function rejectItemAction(formData: FormData) {
+  const db = getDevDb();
+  const pkgId = String(formData.get('packageId') ?? '');
+  const itemId = String(formData.get('itemId') ?? '');
+  if (itemId) await rejectPackageItem(db, itemId, 'Sahil');
+  REVALIDATE(pkgId);
+}
+
+export async function correctMatchAction(formData: FormData) {
+  const db = getDevDb();
+  const pkgId = String(formData.get('packageId') ?? '');
+  const itemId = String(formData.get('itemId') ?? '');
+  // A real canonical entity id (from the picker) or empty to clear. The service
+  // validates status/id coherence and entity existence and throws on mismatch,
+  // so a status that asserts a link can never silently clear a real match.
+  const matchEntityId = (formData.get('matchEntityId') as string) || null;
+  const matchStatus = (formData.get('matchStatus') as string) || null;
+  if (itemId) await correctCanonicalMatch(db, itemId, matchEntityId, matchStatus, 'Sahil');
+  REVALIDATE(pkgId);
+}
+
+/** Server-side canonical match-target search (scales; excludes synthetic;
+ * kind-filtered). Returned to the client picker; the server remains the final
+ * authority in correctCanonicalMatch. */
+export async function searchMatchTargetsAction(term: string, candidateKind: string): Promise<MatchTarget[]> {
+  const db = getDevDb();
+  return searchCanonicalMatchTargets(db, { term, candidateKind, limit: 25 });
+}
+
+export async function clearAgentHoldAction(formData: FormData) {
+  const db = getDevDb();
+  const pkgId = String(formData.get('packageId') ?? '');
+  const itemId = String(formData.get('itemId') ?? '');
+  if (itemId) await clearAgentHold(db, itemId, 'Sahil');
+  REVALIDATE(pkgId);
+}
+
+export async function confirmAgentHoldAction(formData: FormData) {
+  const db = getDevDb();
+  const pkgId = String(formData.get('packageId') ?? '');
+  const itemId = String(formData.get('itemId') ?? '');
+  if (itemId) await confirmAgentHoldAsHuman(db, itemId, 'Sahil');
+  REVALIDATE(pkgId);
+}
+
+/* ---- Cycle 8B: honest queue management actions ---- */
+import { editJobPriority, editJobFocusNote, cancelJob, requeueJob } from '@/src/services/research/queue-admin';
+
+export async function editPriorityAction(formData: FormData) {
+  const db = getDevDb();
+  const jobId = String(formData.get('jobId') ?? '');
+  const priority = Number(formData.get('priority') ?? 0);
+  if (jobId) await editJobPriority(db, jobId, priority);
+  revalidatePath('/crm/queue');
+  revalidatePath('/crm');
+}
+export async function editFocusNoteAction(formData: FormData) {
+  const db = getDevDb();
+  const jobId = String(formData.get('jobId') ?? '');
+  const focusNote = (formData.get('focusNote') as string) || null;
+  if (jobId) await editJobFocusNote(db, jobId, focusNote);
+  revalidatePath('/crm/queue');
+  revalidatePath('/crm');
+}
+export async function cancelJobAction(formData: FormData) {
+  const db = getDevDb();
+  const jobId = String(formData.get('jobId') ?? '');
+  if (jobId) await cancelJob(db, jobId);
+  revalidatePath('/crm/queue');
+  revalidatePath('/crm');
+}
+export async function requeueJobAction(formData: FormData) {
+  const db = getDevDb();
+  const jobId = String(formData.get('jobId') ?? '');
+  if (jobId) await requeueJob(db, jobId);
+  revalidatePath('/crm/queue');
+  revalidatePath('/crm');
+}

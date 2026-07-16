@@ -162,3 +162,21 @@ export async function listRelationshipTypesByKeys(
     where: inArray(relationshipTypeRegistry.key, keys),
   });
 }
+
+/* ---- Cycle 8B: relationship vocabulary v1 seeding ---- */
+import { RELATIONSHIP_VOCABULARY_V1_ADDITIONS } from '../seed/relationship-vocabulary';
+
+/** Idempotently upsert the v1 vocabulary additions (onConflictDoNothing).
+ * Callable from a seed script or tests; the migration performs the same seed. */
+export async function seedRelationshipVocabularyV1(db: Db): Promise<number> {
+  let inserted = 0;
+  for (const entry of RELATIONSHIP_VOCABULARY_V1_ADDITIONS) {
+    const [row] = await db
+      .insert(relationshipTypeRegistry)
+      .values(entry)
+      .onConflictDoNothing()
+      .returning({ key: relationshipTypeRegistry.key });
+    if (row) inserted += 1;
+  }
+  return inserted;
+}

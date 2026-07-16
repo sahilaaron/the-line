@@ -45,7 +45,8 @@ export async function seedResearchDemo(db: Db): Promise<SeedDemoResult> {
   const packages = await db.query.researchPackages.findMany();
   const steamExisting = packages.find((p) => p.centralSlug === 'steam-engine');
   const heroExisting = packages.find((p) => p.centralSlug === 'hero-engine');
-  if (steamExisting && heroExisting) {
+  const studioExisting = packages.find((p) => p.centralSlug === 'studio-demo-engine');
+  if (steamExisting && heroExisting && studioExisting) {
     return { status: 'already_seeded', steamPackageId: steamExisting.id, heroPackageId: heroExisting.id };
   }
 
@@ -66,7 +67,9 @@ export async function seedResearchDemo(db: Db): Promise<SeedDemoResult> {
     });
     const claim = await claimNextJob(db, run.id, { worker: 'seed' });
     if (claim.job) {
-      const { package: pkg } = await submitPackage(db, claim.job.id, STEAM_ENGINE_ENVELOPE, { submittedBy: 'seed' });
+      // Submit through the NORMAL production path: worker + the lease token the
+      // claim returned (the job's workerLock). No trusted bypass.
+      const { package: pkg } = await submitPackage(db, claim.job.id, STEAM_ENGINE_ENVELOPE, { worker: 'seed', leaseToken: claim.job.workerLock! });
       await recordQa(db, pkg.id, STEAM_ENGINE_QA);
       steamPackageId = pkg.id;
     }
@@ -86,9 +89,32 @@ export async function seedResearchDemo(db: Db): Promise<SeedDemoResult> {
     await captureManualJob(db, { title: "Hero's engine (provisional record)", priority: 40 });
     const dupClaim = await claimNextJob(db, run.id, { worker: 'seed' });
     if (dupClaim.job) {
-      const { package: dupPkg } = await submitPackage(db, dupClaim.job.id, HERO_ENVELOPE, { submittedBy: 'seed' });
+      const { package: dupPkg } = await submitPackage(db, dupClaim.job.id, HERO_ENVELOPE, { worker: 'seed', leaseToken: dupClaim.job.workerLock! });
       await recordQa(db, dupPkg.id, { recommendation: 'duplicate', summary: 'Looks like the Aeolipile.', flags: [] });
       heroPackageId = dupPkg.id;
+    }
+  }
+
+  // A THIRD, ISOLATED package for the graph EDIT scenario, so the approval and
+  // edit e2e specs never depend on shared mutation or file order.
+  if (!studioExisting) {
+    const editableEnvelope = {
+      ...STEAM_ENGINE_ENVELOPE,
+      entities: STEAM_ENGINE_ENVELOPE.entities.map((e) =>
+        e.role === 'central' ? { ...e, slug: 'studio-demo-engine', label: 'Studio demo engine (provisional record)' } : e,
+      ),
+      // Mark one relationship as an AGENT-proposed hold so the Studio's
+      // agent-hold resolution controls have something to act on in e2e.
+      connections: STEAM_ENGINE_ENVELOPE.connections.map((c) =>
+        c.ref === 'rel-glasgow' ? { ...c, held: true } : c,
+      ),
+    };
+    await captureManualJob(db, { title: 'Studio demo engine (provisional record)', priority: 30 });
+    const stClaim = await claimNextJob(db, run.id, { worker: 'seed' });
+    if (stClaim.job) {
+      const { package: stPkg } = await submitPackage(db, stClaim.job.id, editableEnvelope, { worker: 'seed', leaseToken: stClaim.job.workerLock! });
+      await recordQa(db, stPkg.id, STEAM_ENGINE_QA);
+      void stPkg;
     }
   }
 

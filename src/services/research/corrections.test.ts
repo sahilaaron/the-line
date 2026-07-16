@@ -12,22 +12,21 @@ import { createPeriod } from '../../db/repositories/periods';
 import { addRelationship } from '../../db/repositories/relationships';
 import { relationships } from '../../db/schema';
 import { addTimeAssociation, registerRelationshipType } from '../../db/repositories/graph-ext';
-import { createJob } from '../../db/repositories/research';
 import { runIntegrityAudit } from '../../db/queries/audit';
 import { getPackageDetail } from '../../db/queries/crm';
-import { submitPackage } from './submit';
 import { decidePackage } from './decision';
 import { recordQa } from './qa';
 import { captureManualJob } from './capture';
+import { stageSubmittedPackage } from './fixtures/staging';
 
 type Env = Record<string, unknown>;
 const central = { ref: 'central', role: 'central' as const, slug: 'root-node', label: 'Root Node', kind: 'concept' as const, classifications: ['concept'] };
 const envelope = (over: Env = {}): Env => ({ schemaVersion: 1, entities: [central], ...over });
 
 async function stage(db: Awaited<ReturnType<typeof freshMigratedDb>>['db'], env: Env, dedupe = Math.random().toString(36).slice(2)) {
-  const job = await createJob(db, { centralTitle: 'X', origin: 'manual', dedupeKey: dedupe, status: 'claimed' });
-  const { package: pkg } = await submitPackage(db, job.id, env);
-  return { job, pkg };
+  void dedupe;
+  const { job, result } = await stageSubmittedPackage(db, env, { title: 'X' });
+  return { job, pkg: result.package };
 }
 
 describe('atomic, replay-safe decisions', () => {

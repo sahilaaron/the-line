@@ -6,7 +6,7 @@
 .nav { display: flex; gap: 1.1rem; }
 .nav a { color: #9aa3b4; text-decoration: none; font-size: 0.82rem; }
 .nav a:hover { color: #e8ecf3; }
-.main { max-width: 1080px; margin: 0 auto; padding: 2rem; }
+.main { max-width: 1360px; margin: 0 auto; padding: 1.6rem 2rem; }
 .h { font-size: 1.02rem; font-weight: 600; color: #eef1f6; margin: 2rem 0 0.85rem; letter-spacing: 0.01em; }
 .h:first-child { margin-top: 0; }
 .sub { color: #7f8798; font-size: 0.8rem; margin: -0.4rem 0 1rem; }

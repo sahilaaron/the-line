@@ -154,6 +154,9 @@ export const relationshipTypeRegistry = pgTable(
     allowedTargetKinds: jsonb('allowed_target_kinds').$type<string[]>(),
     isBuiltin: boolean('is_builtin').notNull().default(false),
     isActive: boolean('is_active').notNull().default(true),
+    /** Cycle 8B: imprecise/provisional type (e.g. associated_with) — flagged
+     * in the UI as requiring later refinement. */
+    isProvisional: boolean('is_provisional').notNull().default(false),
     description: text('description'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },

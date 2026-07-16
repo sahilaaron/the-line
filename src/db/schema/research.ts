@@ -35,6 +35,7 @@ import {
   researchPackageSectionEnum,
   researchPackageStatusEnum,
   researchRunStatusEnum,
+  packageEditKindEnum,
 } from './shared';
 import { entities } from './entities';
 
@@ -84,6 +85,9 @@ export const researchJobs = pgTable(
       onDelete: 'set null',
     }),
     workerLock: text('worker_lock'),
+    /** Cycle 8B correction: exact worker identity of the current lease owner
+     * (never prefix-matched). Cleared on release/recovery/terminal. */
+    claimedByWorker: text('claimed_by_worker'),
     leaseExpiresAt: timestamp('lease_expires_at', { withTimezone: true }),
     attemptCount: integer('attempt_count').notNull().default(0),
     lastError: text('last_error'),
@@ -130,17 +134,26 @@ export const researchPackages = pgTable(
     /** Idempotency: repeated submit of identical content is a no-op. */
     submissionHash: text('submission_hash').notNull(),
     submittedBy: text('submitted_by'),
+    /** Cycle 8B v5: the lease-generation token (workerLock) the submission was
+     * made under, so an idempotent replay can be authenticated (same worker AND
+     * same lease identity) rather than trusting caller-supplied content. */
+    submissionLeaseToken: text('submission_lease_token'),
     submittedAt: timestamp('submitted_at', { withTimezone: true }).notNull().defaultNow(),
     promotedEntityId: text('promoted_entity_id').references(() => entities.id, {
       onDelete: 'set null',
     }),
     promotedAt: timestamp('promoted_at', { withTimezone: true }),
+    /** Cycle 8B: set on any material candidate edit; compared against the
+     * latest QA result to decide whether QA is stale (blocks approval). */
+    lastEditedAt: timestamp('last_edited_at', { withTimezone: true }),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index('research_packages_job_idx').on(t.jobId),
     index('research_packages_status_idx').on(t.status),
     unique('research_packages_job_hash_unique').on(t.jobId, t.submissionHash),
+    // Cycle 8B v4: at most ONE package per job (a correction is a NEW job).
+    unique('research_packages_job_unique').on(t.jobId),
     check('research_packages_slug_not_empty', sql`length(${t.centralSlug}) > 0`),
   ],
 );
@@ -162,7 +175,19 @@ export const researchPackageItems = pgTable(
     matchStatus: text('match_status'),
     /** Marked synthetic -> NEVER promotable into canonical rows. */
     isSynthetic: boolean('is_synthetic').notNull().default(false),
+    /** Effective hold = humanHeld OR qaHeld. Maintained on every hold write and
+     * kept consistent by a CHECK. Retained so existing reads of `held`
+     * (promotion, approve_with_holds) still mean "excluded by default". */
     held: boolean('held').notNull().default(false),
+    /** Cycle 8B v3 correction: INDEPENDENT hold provenance. A human hold and a
+     * current QA hold can coexist; removing one preserves the other. A passing
+     * QA rerun clears qaHeld only; a human unhold clears humanHeld only. */
+    humanHeld: boolean('human_held').notNull().default(false),
+    qaHeld: boolean('qa_held').notNull().default(false),
+    /** Cycle 8B v4: a hold PROPOSED by the research agent in the submitted
+     * envelope (before QA/human review). Distinct provenance — it is neither a
+     * QA finding nor a human review decision, so it is never fabricated as one. */
+    agentHeld: boolean('agent_held').notNull().default(false),
     decision: researchItemDecisionEnum('decision').notNull().default('pending'),
     decidedAt: timestamp('decided_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -171,6 +196,8 @@ export const researchPackageItems = pgTable(
     index('research_package_items_pkg_idx').on(t.packageId),
     index('research_package_items_section_idx').on(t.packageId, t.section),
     unique('research_package_items_ref_unique').on(t.packageId, t.section, t.localRef),
+    // held must always equal (humanHeld OR qaHeld): no invalid hold state.
+    check('research_package_items_held_consistent', sql`${t.held} = (${t.humanHeld} OR ${t.qaHeld} OR ${t.agentHeld})`),
   ],
 );
 
@@ -247,6 +274,39 @@ export const packageDecisions = pgTable(
     unique('package_decisions_pkg_unique').on(t.packageId),
   ],
 );
+
+/** Cycle 8B — append-only audit trail of candidate edits made in the Studio
+ * before approval. The immutable submitted envelope is never changed; edits
+ * apply to normalized package items and are fully reconstructable from here. */
+export const researchPackageItemRevisions = pgTable(
+  'research_package_item_revisions',
+  {
+    id: text('id').primaryKey().$defaultFn(newId),
+    itemId: text('item_id')
+      .notNull()
+      .references(() => researchPackageItems.id, { onDelete: 'cascade' }),
+    packageId: text('package_id')
+      .notNull()
+      .references(() => researchPackages.id, { onDelete: 'cascade' }),
+    editKind: packageEditKindEnum('edit_kind').notNull(),
+    editor: text('editor').notNull(),
+    /** Deterministic before/after change record. */
+    beforeValue: jsonb('before_value').$type<Record<string, unknown>>(),
+    afterValue: jsonb('after_value').$type<Record<string, unknown>>(),
+    note: text('note'),
+    /** True when this edit invalidated a prior QA result. */
+    invalidatedQa: boolean('invalidated_qa').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('research_package_item_revisions_item_idx').on(t.itemId),
+    index('research_package_item_revisions_pkg_idx').on(t.packageId),
+    check('research_package_item_revisions_editor_not_empty', sql`length(${t.editor}) > 0`),
+  ],
+);
+
+export type ResearchPackageItemRevision = typeof researchPackageItemRevisions.$inferSelect;
+export type NewResearchPackageItemRevision = typeof researchPackageItemRevisions.$inferInsert;
 
 export type ResearchRun = typeof researchRuns.$inferSelect;
 export type NewResearchRun = typeof researchRuns.$inferInsert;
