@@ -1,0 +1,53 @@
+{
+  "recommendation": "hold",
+  "summary": "Well-sourced package; settled facts verified against multiple sources. Four items held as two pairs: the Asia-to-Europe transmission link and its claim (genuinely contested among historians), and the Coster rival-claimant association and its claim (regarded as legend). Disputed figures are honestly ranged rather than point-asserted.",
+  "toolName": "cowork-qa-session",
+  "model": "claude-fable-5",
+  "qaRunRef": "qa-movable-type-1",
+  "flags": [
+    {
+      "targetSection": "relationship",
+      "targetRef": "rel-asia",
+      "severity": "major",
+      "category": "attribution",
+      "explanation": "Transmission of movable type from East Asia to Europe is contested: Gies asserts it is 'almost certain', McDermott counters that no evidence of Asian movable type in Europe before 1450 exists. Influence must not enter the canonical graph as fact without stronger evidence.",
+      "correctiveSource": "https://en.wikipedia.org/wiki/Movable_type (Gies vs McDermott passages)",
+      "state": "hold"
+    },
+    {
+      "targetSection": "relationship",
+      "targetRef": "rel-coster",
+      "severity": "major",
+      "category": "attribution",
+      "explanation": "The Coster invention claim rests on a single account written c. 1567, over a century after the fact; no printed works by Coster are known, and the Gutenberg literature calls the connection 'a mere legend'. Association with the invention story is historiographic, not historical.",
+      "correctiveSource": "https://en.wikipedia.org/wiki/Laurens_Janszoon_Coster",
+      "state": "hold"
+    },
+    {
+      "targetSection": "claim",
+      "targetRef": "c-spread",
+      "severity": "minor",
+      "category": "conflicting_figures",
+      "explanation": "Output figures conflict across sources (8M vs 20M volumes; 236/250/270 towns). The claim honestly states the range, so it passes, but the range should not be narrowed without better sources.",
+      "state": "pass"
+    },
+    {
+      "targetSection": "claim",
+      "targetRef": "c-transmission",
+      "severity": "major",
+      "category": "attribution",
+      "explanation": "Depends on held relationship rel-asia: an accepted claim may not reference an unresolved/held relationship. Hold together; resolve as a pair when better transmission evidence exists.",
+      "correctiveSource": "https://en.wikipedia.org/wiki/Movable_type",
+      "state": "hold"
+    },
+    {
+      "targetSection": "claim",
+      "targetRef": "c-coster",
+      "severity": "major",
+      "category": "attribution",
+      "explanation": "Depends on held relationship rel-coster: the historiographic claim about the Coster legend is sound in itself but is subject-linked to a held relationship. Hold together.",
+      "correctiveSource": "https://en.wikipedia.org/wiki/Laurens_Janszoon_Coster",
+      "state": "hold"
+    }
+  ]
+}
