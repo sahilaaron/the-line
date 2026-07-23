@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "submittedBy": "cowork:research-session",
+  "job": {
+    "centralTitle": "Movable-type printing",
+    "centralUrl": "https://en.wikipedia.org/wiki/Movable_type"
+  },
+  "entities": [
+    {
+      "ref": "central",
+      "role": "central",
+      "slug": "movable-type-printing",
+      "label": "Metal movable-type printing (Europe)",
+      "kind": "invention",
+      "classifications": ["invention", "technology"],
+      "shortDescription": "The European system for printing from mass-produced, reusable cast-metal type, assembled by Johannes Gutenberg in Mainz by 1454-1455.",
+      "fullDescription": "Between roughly 1436 and 1455 Johannes Gutenberg combined pre-existing technologies (the screw press, oil-based ink, the concept of movable type) with an adjustable hand mould for casting uniform metal type into a repeatable system for mass-producing books. Ceramic, wooden and metal movable type existed earlier in China and Korea; Gutenberg's decisive contribution was the casting system and integrated press-and-ink workflow suited to a small alphabet. By 1500 presses operated in over 200 European towns.",
+      "aliases": [
+        { "alias": "movable type", "aliasType": "alias" },
+        { "alias": "letterpress printing", "aliasType": "alias" }
+      ],
+      "externalIds": [
+        { "scheme": "wikipedia", "value": "Movable_type" }
+      ]
+    },
+    { "ref": "gutenberg", "role": "connected", "slug": "johannes-gutenberg", "label": "Johannes Gutenberg", "kind": "person", "classifications": ["person"],
+      "shortDescription": "Mainz goldsmith (c. 1400-1468) who developed the European metal movable-type printing system and produced the 42-line Bible.",
+      "externalIds": [{ "scheme": "wikipedia", "value": "Johannes_Gutenberg" }] },
+    { "ref": "fust", "role": "connected", "slug": "johann-fust", "label": "Johann Fust", "kind": "person", "classifications": ["person"],
+      "shortDescription": "Mainz financier (d. 1466); lent Gutenberg two ~800-guilder sums, sued him in 1455/56 and won control of the Bible workshop." },
+    { "ref": "schoeffer", "role": "connected", "slug": "peter-schoeffer", "label": "Peter Schöffer", "kind": "person", "classifications": ["person"],
+      "shortDescription": "Former Paris calligrapher (c. 1425-1503); typographer for Gutenberg and Fust; co-produced the 1457 Mainz Psalter." },
+    { "ref": "mould", "role": "connected", "slug": "adjustable-hand-mould", "label": "Adjustable hand mould", "kind": "invention", "classifications": ["invention", "technology"],
+      "shortDescription": "Gutenberg's device for casting large numbers of identical metal letters quickly from a punched matrix; widely called his single most ingenious invention." },
+    { "ref": "screwpress", "role": "connected", "slug": "screw-press", "label": "Screw press", "kind": "technology", "classifications": ["technology"],
+      "shortDescription": "Pre-existing agricultural press (wine/oil) whose mechanism Gutenberg adapted for printing; he re-engineered the platen, not the press itself." },
+    { "ref": "bible42", "role": "connected", "slug": "gutenberg-bible", "label": "Gutenberg Bible (42-line Bible)", "kind": "publication", "classifications": ["publication", "work"],
+      "shortDescription": "First major European book printed with mass-produced metal movable type; Mainz, completed 1454-1455.",
+      "externalIds": [{ "scheme": "wikipedia", "value": "Gutenberg_Bible" }] },
+    { "ref": "psalter", "role": "connected", "slug": "mainz-psalter", "label": "Mainz Psalter", "kind": "publication", "classifications": ["publication", "work"],
+      "shortDescription": "First dated printed book, with the first colophon and printed red/blue initials; Fust & Schöffer, Mainz, August 1457." },
+    { "ref": "jikji", "role": "connected", "slug": "jikji", "label": "Jikji", "kind": "publication", "classifications": ["publication", "work"],
+      "shortDescription": "Korean Buddhist anthology (1377), the world's oldest extant book printed with metal movable type - predating Gutenberg by decades." },
+    { "ref": "coster", "role": "connected", "slug": "laurens-janszoon-coster", "label": "Laurens Janszoon Coster", "kind": "person", "classifications": ["person"],
+      "shortDescription": "Haarlem figure said (from a c. 1567 account) to have printed in the 1420s; no known works survive and the connection is today regarded as legend." },
+    { "ref": "waldvogel", "role": "connected", "slug": "prokop-waldvogel", "label": "Prokop Waldvogel", "kind": "person", "classifications": ["person"],
+      "shortDescription": "Avignon silversmith with 1444-1446 contracts for 'artificial writing' referencing metal type-like equipment; no printed books are known from him." },
+    { "ref": "caxton", "role": "connected", "slug": "william-caxton", "label": "William Caxton", "kind": "person", "classifications": ["person"],
+      "shortDescription": "Merchant-printer who set up the first press in England at Westminster in 1476 after printing at Bruges with Colard Mansion." },
+    { "ref": "mainz", "role": "connected", "slug": "mainz", "label": "Mainz", "kind": "place", "classifications": ["place"],
+      "shortDescription": "Rhineland city where Gutenberg developed his press and printed the 42-line Bible; its 1462 sack dispersed trained printers across Europe." }
+  ],
+  "chronology": [
+    { "ref": "t-invented", "entityRef": "central", "role": "invented", "label": "Gutenberg develops the system (date contested: 1436/1439/1440/c.1450)", "startYear": 1436, "endYear": 1450, "precision": "range", "confidence": 40, "note": "Anchor dates conflict across sources; earliest hard evidence is the Dec 1439 Dritzehn lawsuit testimony. See disputed-claims question." },
+    { "ref": "t-demonstrated", "entityRef": "central", "role": "demonstrated", "label": "Bible pages shown at Frankfurt (reported by Piccolomini, March 1455)", "startYear": 1455, "precision": "exact", "confidence": 85 },
+    { "ref": "t-adopted", "entityRef": "central", "role": "adopted", "label": "Spread from Mainz to 200+ European towns", "startYear": 1457, "endYear": 1500, "precision": "range", "confidence": 80 },
+    { "ref": "t-g-born", "entityRef": "gutenberg", "role": "born", "label": "Gutenberg born, Mainz (year unknown; 1400 assigned by convention)", "startYear": 1400, "precision": "approximate", "confidence": 40 },
+    { "ref": "t-g-died", "entityRef": "gutenberg", "role": "died", "label": "Gutenberg dies, Mainz", "startYear": 1468, "precision": "exact", "confidence": 90 },
+    { "ref": "t-bible", "entityRef": "bible42", "role": "published", "label": "First finished copies available", "startYear": 1454, "endYear": 1455, "precision": "range", "confidence": 85 },
+    { "ref": "t-psalter", "entityRef": "psalter", "role": "published", "label": "Mainz Psalter printed by Fust & Schöffer", "startYear": 1457, "precision": "exact", "confidence": 90 },
+    { "ref": "t-jikji", "entityRef": "jikji", "role": "published", "label": "Jikji printed with metal movable type, Korea", "startYear": 1377, "precision": "exact", "confidence": 85 },
+    { "ref": "t-caxton", "entityRef": "caxton", "role": "active", "label": "Caxton establishes the first English press at Westminster", "startYear": 1476, "precision": "exact", "confidence": 85 }
+  ],
+  "connections": [
+    { "ref": "rel-inventor", "sourceRef": "central", "targetRef": "gutenberg", "typeKey": "invented_by", "explanation": "Gutenberg assembled the system (casting, ink, press workflow); movable type as a concept predates him in Asia.", "confidence": 80, "strength": 85, "assertionClass": "recorded_fact" },
+    { "ref": "rel-mould-dev", "sourceRef": "mould", "targetRef": "gutenberg", "typeKey": "developed_by", "explanation": "The adjustable hand mould is Gutenberg's original, decisive contribution (exact casting method contested - see question).", "confidence": 70, "assertionClass": "recorded_fact" },
+    { "ref": "rel-mould-part", "sourceRef": "mould", "targetRef": "central", "typeKey": "part_of", "explanation": "The hand mould is the component that made mass production of uniform type possible.", "confidence": 85, "assertionClass": "recorded_fact" },
+    { "ref": "rel-screw", "sourceRef": "central", "targetRef": "screwpress", "typeKey": "derived_from", "explanation": "The press mechanism was adapted from ubiquitous agricultural screw presses; Gutenberg re-engineered the platen.", "confidence": 75, "assertionClass": "recorded_fact" },
+    { "ref": "rel-funded", "sourceRef": "central", "targetRef": "fust", "typeKey": "funded_by", "explanation": "Two ~800-guilder loans (c. 1449-50 and 1452) financed the press and the Bible work.", "confidence": 85, "assertionClass": "recorded_fact" },
+    { "ref": "rel-lawsuit", "sourceRef": "fust", "targetRef": "gutenberg", "typeKey": "opposed", "explanation": "Fust sued for repayment in 1455/56; the court sided with Fust, who took control of the Bible workshop.", "confidence": 80, "assertionClass": "recorded_fact" },
+    { "ref": "rel-bible", "sourceRef": "bible42", "targetRef": "gutenberg", "typeKey": "developed_by", "explanation": "Printed by Gutenberg's Mainz workshop, 1452-1455.", "confidence": 85, "assertionClass": "recorded_fact" },
+    { "ref": "rel-psalter", "sourceRef": "psalter", "targetRef": "schoeffer", "typeKey": "developed_by", "explanation": "Produced by Fust & Schöffer after the workshop passed to Fust.", "confidence": 80, "assertionClass": "recorded_fact" },
+    { "ref": "rel-collab", "sourceRef": "schoeffer", "targetRef": "fust", "typeKey": "collaborated_with", "explanation": "Ran the first commercially successful printing house together; Schöffer was Fust's son-in-law.", "confidence": 85, "assertionClass": "recorded_fact" },
+    { "ref": "rel-jikji-prec", "sourceRef": "jikji", "targetRef": "central", "typeKey": "preceded", "explanation": "Korean metal movable type (Jikji, 1377) predates the European system by decades.", "confidence": 90, "assertionClass": "recorded_fact" },
+    { "ref": "rel-asia", "sourceRef": "jikji", "targetRef": "central", "typeKey": "influenced", "explanation": "CONTESTED: Gies argues westward transmission is 'almost certain'; McDermott counters that no evidence of Asian movable type in Europe before 1450 exists. Held for human review.", "confidence": 30, "assertionClass": "interpretation" },
+    { "ref": "rel-coster", "sourceRef": "coster", "targetRef": "central", "typeKey": "associated_with", "explanation": "Legendary rival-inventor claim (Haarlem, 1420s) from Junius's Batavia (c. 1567); 'today regarded as a mere legend'; no known works.", "confidence": 15, "assertionClass": "interpretation" },
+    { "ref": "rel-waldvogel", "sourceRef": "waldvogel", "targetRef": "central", "typeKey": "associated_with", "explanation": "1444-46 Avignon contracts reference metal type-like equipment ('ars artificialiter scribendi'), but no printed books; priority rests with Gutenberg on surviving evidence.", "confidence": 25, "assertionClass": "interpretation" },
+    { "ref": "rel-caxton", "sourceRef": "central", "targetRef": "caxton", "typeKey": "adopted_by", "explanation": "Caxton brought the technology to England (Westminster, 1476) after printing at Bruges.", "confidence": 85, "assertionClass": "recorded_fact" },
+    { "ref": "rel-mainz", "sourceRef": "central", "targetRef": "mainz", "typeKey": "developed_in", "explanation": "Developed and first commercially proven in Mainz (Humbrechthof workshop; 42-line Bible).", "confidence": 90, "assertionClass": "recorded_fact" }
+  ],
+  "sources": [
+    { "ref": "src-wp-gutenberg", "title": "Wikipedia: Johannes Gutenberg", "type": "website", "url": "https://en.wikipedia.org/wiki/Johannes_Gutenberg" },
+    { "ref": "src-wp-bible", "title": "Wikipedia: Gutenberg Bible", "type": "website", "url": "https://en.wikipedia.org/wiki/Gutenberg_Bible" },
+    { "ref": "src-wp-press", "title": "Wikipedia: Printing press", "type": "website", "url": "https://en.wikipedia.org/wiki/Printing_press" },
+    { "ref": "src-wp-movable", "title": "Wikipedia: Movable type", "type": "website", "url": "https://en.wikipedia.org/wiki/Movable_type" },
+    { "ref": "src-wp-spread", "title": "Wikipedia: Global spread of the printing press", "type": "website", "url": "https://en.wikipedia.org/wiki/Global_spread_of_the_printing_press" },
+    { "ref": "src-wp-coster", "title": "Wikipedia: Laurens Janszoon Coster", "type": "website", "url": "https://en.wikipedia.org/wiki/Laurens_Janszoon_Coster" },
+    { "ref": "src-wp-waldvogel", "title": "Wikipedia: Prokop Waldvogel", "type": "website", "url": "https://en.wikipedia.org/wiki/Prokop_Waldvogel" },
+    { "ref": "src-hoi", "title": "History of Information: Gutenberg Begins Experimentation on Printing (1439 Strasbourg lawsuit)", "type": "website", "url": "https://www.historyofinformation.com/detail.php?id=280" },
+    { "ref": "src-gg", "title": "Gutenberg-Gesellschaft: Gutenberg in Strasbourg", "type": "website", "url": "https://www.gutenberg-gesellschaft.de/en/johannes-gutenberg/gutenberg-in-strasbourg" },
+    { "ref": "src-prepressure", "title": "Prepressure: 1400-1499, history of printing in the 15th century", "type": "website", "url": "https://www.prepressure.com/printing/history/1400-1499" },
+    { "ref": "src-1439", "title": "Dritzehn heirs v. Gutenberg - Strasbourg court testimony, 12 Dec 1439 (referenced via secondary sources)", "type": "primary_document", "publicationYear": 1439 },
+    { "ref": "src-1455-letter", "title": "Enea Silvio Piccolomini (later Pius II), letter reporting Bible pages seen at Frankfurt, c. March 1455 (referenced via secondary sources)", "type": "primary_document", "publicationYear": 1455 }
+  ],
+  "claims": [
+    { "ref": "c-bible-first", "subjectRef": "bible42", "subjectSection": "entity", "text": "The 42-line Bible (Mainz, completed 1454-1455) is the first major European book printed with mass-produced metal movable type.", "assertionClass": "recorded_fact", "confidence": 85, "verification": "verified", "sourceLinks": [{ "sourceRef": "src-wp-bible" }, { "sourceRef": "src-wp-gutenberg" }] },
+    { "ref": "c-1439", "subjectRef": "central", "subjectSection": "entity", "text": "Testimony in the December 1439 Dritzehn lawsuit records a press, molten lead, forms and punches - the earliest hard evidence of Gutenberg's printing experiments.", "assertionClass": "recorded_fact", "confidence": 80, "verification": "verified", "sourceLinks": [{ "sourceRef": "src-hoi", "quotation": "the court records refer to purchases of lead and printing materials - to forms and pieces that make sense only in terms of printing with movable type." }, { "sourceRef": "src-gg" }, { "sourceRef": "src-1439" }] },
+    { "ref": "c-piccolomini", "subjectRef": "central", "subjectSection": "entity", "text": "The future Pope Pius II reported seeing pages of the Bible displayed at Frankfurt in a letter of March 1455 - the key external dating evidence.", "assertionClass": "recorded_fact", "confidence": 85, "verification": "verified", "sourceLinks": [{ "sourceRef": "src-wp-gutenberg" }, { "sourceRef": "src-1455-letter" }] },
+    { "ref": "c-fust", "subjectRef": "rel-lawsuit", "subjectSection": "relationship", "text": "Fust lent Gutenberg two sums of about 800 guilders, sued for repayment in 1455/56, and was awarded control of the Bible workshop, leaving Gutenberg effectively bankrupt.", "assertionClass": "recorded_fact", "confidence": 85, "verification": "verified", "sourceLinks": [{ "sourceRef": "src-wp-gutenberg" }] },
+    { "ref": "c-mould", "subjectRef": "mould", "subjectSection": "entity", "text": "The adjustable hand mould with punched matrix allowed large numbers of identical, precisely sized metal letters to be cast quickly, and is widely called Gutenberg's single most ingenious invention.", "assertionClass": "interpretation", "confidence": 75, "verification": "corroborated", "sourceLinks": [{ "sourceRef": "src-wp-gutenberg" }, { "sourceRef": "src-wp-press" }] },
+    { "ref": "c-psalter", "subjectRef": "psalter", "subjectSection": "entity", "text": "The Mainz Psalter (August 1457) is the first printed book bearing a date and colophon, with printed red and blue initials.", "assertionClass": "recorded_fact", "confidence": 85, "verification": "verified", "sourceLinks": [{ "sourceRef": "src-prepressure" }, { "sourceRef": "src-wp-gutenberg" }] },
+    { "ref": "c-jikji", "subjectRef": "jikji", "subjectSection": "entity", "text": "The Jikji (Korea, 1377) is the world's oldest extant book printed with metal movable type, predating Gutenberg's work by decades.", "assertionClass": "recorded_fact", "confidence": 90, "verification": "verified", "sourceLinks": [{ "sourceRef": "src-wp-movable", "quotation": "the world's oldest metallic movable type-printed book" }] },
+    { "ref": "c-alphabet", "subjectRef": "central", "subjectSection": "entity", "text": "Movable type stayed marginal in East Asia partly because logographic scripts require thousands of characters; Europe's small alphabet made a complete reusable type set economically viable.", "assertionClass": "interpretation", "confidence": 70, "verification": "corroborated", "sourceLinks": [{ "sourceRef": "src-wp-movable" }, { "sourceRef": "src-wp-press" }] },
+    { "ref": "c-transmission", "subjectRef": "rel-asia", "subjectSection": "relationship", "text": "Historians dispute whether Gutenberg invented independently of East Asian movable type: Gies calls westward transmission 'almost certain'; McDermott finds no evidence of Asian movable type in Europe before 1450.", "assertionClass": "interpretation", "confidence": 50, "verification": "unverified", "sourceLinks": [{ "sourceRef": "src-wp-movable", "quotation": "No text indicates the presence or knowledge of any kind of Asian movable type or movable type imprint in Europe before 1450." }] },
+    { "ref": "c-spread", "subjectRef": "central", "subjectSection": "entity", "text": "By 1500 presses operated in more than 200 European towns (sources give 236, ~250 or ~270); total incunabula output is estimated between roughly 8 and 20 million volumes across some 30,000-40,000 editions - figures disputed.", "assertionClass": "recorded_fact", "confidence": 70, "verification": "corroborated", "sourceLinks": [{ "sourceRef": "src-wp-spread" }, { "sourceRef": "src-wp-press" }] },
+    { "ref": "c-copies", "subjectRef": "bible42", "subjectSection": "entity", "text": "Scholars estimate 160-185 Bible copies were printed (a 1455 letter cites both 158 and 180); 49 were known to survive as of 2009, only 25 complete.", "assertionClass": "recorded_fact", "confidence": 70, "verification": "corroborated", "sourceLinks": [{ "sourceRef": "src-wp-bible" }] },
+    { "ref": "c-coster", "subjectRef": "rel-coster", "subjectSection": "relationship", "text": "The claim that Coster invented printing in Haarlem in the 1420s rests on Junius's Batavia (written c. 1567); no works printed by him are known, and the connection 'is today regarded as a mere legend'.", "assertionClass": "interpretation", "confidence": 60, "verification": "corroborated", "sourceLinks": [{ "sourceRef": "src-wp-coster" }, { "sourceRef": "src-wp-gutenberg", "quotation": "The Coster connection is today regarded as a mere legend." }] }
+  ],
+  "media": [
+    { "ref": "m-placeholder", "subjectRef": "central", "mediaType": "image", "alt": "Placeholder plate for metal movable-type printing; no archival image asserted.", "rightsStatus": "unknown", "status": "placeholder" }
+  ],
+  "questions": [
+    { "ref": "q-date", "category": "ambiguity", "detail": "When did Gutenberg actually invent printing? Sources anchor on 1436 (partnership), 1439 (lawsuit evidence), 1440 ('perfected the secret'), or c. 1450-55 (Bible work). Chronology entry t-invented uses a low-confidence range.", "severity": "major", "relatedSection": "time", "relatedRef": "t-invented" },
+    { "ref": "q-casting", "category": "ambiguity", "detail": "How was Gutenberg's type cast? Punch-and-matrix vs a more 'primitive' method is debated; 2001 research found his earliest type shows variations inconsistent with pure punch-matrix casting.", "severity": "major", "relatedSection": "entity", "relatedRef": "mould" },
+    { "ref": "q-transmission", "category": "conflict", "detail": "Asian priority is established (Jikji 1377, Bi Sheng c. 1040, Wang Zhen c. 1298), but whether the technique or a report of it reached Europe is contested (Gies vs McDermott). Connection rel-asia is asserted only as low-confidence interpretation.", "severity": "major", "relatedSection": "relationship", "relatedRef": "rel-asia" },
+    { "ref": "q-figures", "category": "weak_evidence", "detail": "Output figures conflict: 8M vs 20M volumes by 1500; 220 presses vs 236/250/270 towns; press rate 3,200-3,600 impressions/day vs 240/hour. Magnitude agreed, exact figures vary by source.", "severity": "minor", "relatedSection": "claim", "relatedRef": "c-spread" },
+    { "ref": "q-britannica", "category": "weak_evidence", "detail": "Britannica could not be machine-fetched (HTTP 403) during research; its dates are consistent with other sources but should be confirmed by hand before any public use.", "severity": "info" }
+  ],
+  "nextEntities": [
+    { "ref": "n-press", "title": "Printing press", "reason": "The machine itself deserves its own record distinct from the type system; central to diffusion.", "suggestedPriority": 50 },
+    { "ref": "n-asia", "title": "Movable type in East Asia (Bi Sheng, Wang Zhen, Korean type casting)", "reason": "Causal context for the European system; Jikji is in this package but the Asian lineage is unresearched.", "suggestedPriority": 45 },
+    { "ref": "n-aldus", "title": "Aldus Manutius", "reason": "Venice; octavo format and italic type (1499-1501) - the next transformation of the printed book.", "suggestedPriority": 35 },
+    { "ref": "n-revolution", "title": "Printing Revolution", "reason": "Long-run consequences (literacy, Reformation, Scientific Revolution) need their own carefully-classed records - influence, not direct causation.", "suggestedPriority": 30 }
+  ]
+}
